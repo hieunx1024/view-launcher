@@ -29,6 +29,7 @@ pub struct LauncherItem {
     pub exec_or_path: String,
     pub item_type: ItemType,
     pub description: Option<String>,
+    pub terminal: bool,
 }
 
 pub struct LauncherEngine {
@@ -117,6 +118,7 @@ impl LauncherEngine {
                         exec_or_path: exec,
                         item_type: ItemType::App,
                         description: Some("Windows Shortcut".to_string()),
+                        terminal: false,
                     });
                 }
             }
@@ -134,6 +136,7 @@ impl LauncherEngine {
         let mut is_app = false;
         let mut no_display = false;
         let mut hidden = false;
+        let mut terminal = false;
         let mut in_desktop_entry = false;
 
         for line in reader.lines().flatten() {
@@ -191,6 +194,11 @@ impl LauncherEngine {
                             hidden = true;
                         }
                     }
+                    "Terminal" => {
+                        if val == "true" {
+                            terminal = true;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -202,6 +210,7 @@ impl LauncherEngine {
                 exec_or_path: exec,
                 item_type: ItemType::App,
                 description: comment,
+                terminal,
             })
         } else {
             None
@@ -246,6 +255,7 @@ impl LauncherEngine {
                 exec_or_path: path_str,
                 item_type,
                 description: Some(path.parent().map_or("".to_string(), |p| p.to_string_lossy().to_string())),
+                terminal: false,
             });
         }
     }
@@ -305,6 +315,7 @@ impl LauncherEngine {
                     exec_or_path: path_str,
                     item_type,
                     description: Some(dir.to_string_lossy().to_string()),
+                    terminal: false,
                 });
             }
         }
@@ -400,6 +411,13 @@ impl LauncherEngine {
     pub fn launch(&self, item: &LauncherItem) {
         let res = match item.item_type {
             ItemType::App => {
+                let exec_cmd = if item.terminal {
+                    let term = find_terminal_emulator();
+                    format!("{} -e {}", term, item.exec_or_path)
+                } else {
+                    item.exec_or_path.clone()
+                };
+
                 // We use standard pre_exec Unix Extension in Rust to execute setsid()
                 // in the child process immediately after fork but before exec. This is the 
                 // native systems-level way to create a new session, fully detaching the process
@@ -407,7 +425,7 @@ impl LauncherEngine {
                 unsafe {
                     Command::new("sh")
                         .arg("-c")
-                        .arg(format!("exec {}", item.exec_or_path))
+                        .arg(format!("exec {}", exec_cmd))
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
                         .stdin(std::process::Stdio::null())
@@ -462,6 +480,46 @@ impl LauncherEngine {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
+fn find_terminal_emulator() -> String {
+    if let Ok(term) = std::env::var("TERMINAL") {
+        if !term.trim().is_empty() {
+            return term;
+        }
+    }
+    
+    let common_terminals = vec![
+        "kitty",
+        "alacritty",
+        "wezterm",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "xterm",
+    ];
+    
+    for term in common_terminals {
+        if which_binary(term) {
+            return term.to_string();
+        }
+    }
+    
+    "xterm".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn which_binary(name: &str) -> bool {
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in path.split(':') {
+            let p = Path::new(dir).join(name);
+            if p.exists() && p.is_file() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Helper function to strip Vietnamese accents and convert to lowercase for accent-insensitive search.
 pub fn remove_vietnamese_accents(s: &str) -> String {
     s.chars().map(|c| {
@@ -487,6 +545,20 @@ pub fn remove_vietnamese_accents(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_search_yazi() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        let results = engine.search("yazi");
+        println!("\n=== SEARCH RESULTS FOR 'YAZI' ===");
+        for (i, item) in results.iter().enumerate() {
+            println!("{}: [{:?}] {} (Exec: {}) [Terminal: {}]", i + 1, item.item_type, item.name, item.exec_or_path, item.terminal);
+        }
+        println!("=================================\n");
+        assert!(!results.is_empty(), "Should find yazi application or files");
+        assert!(results[0].terminal, "Yazi desktop entry should specify Terminal=true");
+    }
 
     #[test]
     fn test_resolve_path_search_no_slash() {
