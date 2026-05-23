@@ -15,10 +15,33 @@ Trình khởi chạy ứng dụng và tệp tin siêu tối giản, tốc độ 
 
 ## 🛠️ Hướng dẫn cài đặt
 
+### 1. Trên Arch Linux (AUR)
+
+Nếu bạn sử dụng **Arch Linux**, ứng dụng đã được đẩy lên **AUR** với tên gói là `view-launcher-git`. Bạn có thể cài đặt dễ dàng thông qua các AUR helper:
+
+```bash
+# Cài đặt bằng yay
+yay -S view-launcher-git
+
+# Hoặc cài đặt bằng paru
+paru -S view-launcher-git
+```
+
+Hoặc cài đặt thủ công qua Git & `makepkg`:
+```bash
+git clone https://aur.archlinux.org/view-launcher-git.git
+cd view-launcher-git
+makepkg -si
+```
+
+---
+
+### 2. Biên dịch từ nguồn (Các hệ điều hành khác)
+
 Bạn chỉ cần biên dịch một lần để tạo ra tệp chạy duy nhất, không phụ thuộc vào bất kỳ thư viện ngoài nào.
 
 ```bash
-# 1. Biên dịch bản release tối ưu
+# Biên dịch bản release tối ưu
 cargo build --release
 ```
 Tệp nhị phân sau khi biên dịch nằm tại: `target/release/view-launcher` (hoặc `.exe` trên Windows).
