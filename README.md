@@ -2,6 +2,8 @@
 
 Trình khởi chạy ứng dụng và tệp tin siêu tối giản, tốc độ cực hạn (<1ms) viết bằng **Rust**. Hoạt động mượt mà trên cả **Linux** (Wayland/X11) và **Windows** thông qua giao diện dòng lệnh TUI (`ratatui` + `crossterm`).
 
+![view-launcher](assets/screenshot.png)
+
 ---
 
 ## ✨ Tính năng cốt lõi
