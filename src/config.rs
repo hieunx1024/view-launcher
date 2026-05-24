@@ -16,6 +16,8 @@ pub struct ThemeConfig {
 pub struct SearchConfig {
     pub max_depth: usize,
     pub ignored_dirs: Vec<String>,
+    #[serde(alias = "disable_fcitx")]
+    pub disable_ime: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -37,7 +39,7 @@ impl Default for Config {
             },
             search: SearchConfig {
                 max_depth: 3,
-                ignored_dirs: vec![
+                                ignored_dirs: vec![
                     ".git".to_string(),
                     ".cargo".to_string(),
                     ".cache".to_string(),
@@ -46,6 +48,7 @@ impl Default for Config {
                     "build".to_string(),
                     "dist".to_string(),
                 ],
+                disable_ime: Some(false),
             },
         }
     }

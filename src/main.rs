@@ -104,6 +104,93 @@ fn auto_bootstrap_windows() {
     }
 }
 
+enum ActiveIme {
+    None,
+    Fcitx(&'static str),
+    Ibus(String),
+}
+
+struct ImeGuard {
+    active_ime: ActiveIme,
+}
+
+impl ImeGuard {
+    fn new() -> Self {
+        let mut active_ime = ActiveIme::None;
+        #[cfg(target_os = "linux")]
+        {
+            // 1. Try Fcitx (Fcitx5 first, fallback to Fcitx4)
+            let mut fcitx_cmd = "fcitx5-remote";
+            let mut fcitx_output = std::process::Command::new("fcitx5-remote").output();
+            if fcitx_output.is_err() {
+                fcitx_cmd = "fcitx-remote";
+                fcitx_output = std::process::Command::new("fcitx-remote").output();
+            }
+
+            if let Ok(out) = fcitx_output {
+                let status = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if status == "2" {
+                    active_ime = ActiveIme::Fcitx(fcitx_cmd);
+                    // Deactivate input method (switch to English)
+                    let _ = std::process::Command::new(fcitx_cmd)
+                        .arg("-c")
+                        .status();
+
+                    // Spawn a helper thread to enforce deactivation after a short delay
+                    // to override any focus-in events triggered by terminal emulator startup.
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        let _ = std::process::Command::new(fcitx_cmd)
+                            .arg("-c")
+                            .status();
+                        std::thread::sleep(std::time::Duration::from_millis(150));
+                        let _ = std::process::Command::new(fcitx_cmd)
+                            .arg("-c")
+                            .status();
+                    });
+                }
+            }
+
+            // 2. Try IBus if Fcitx was not active
+            if matches!(active_ime, ActiveIme::None) {
+                if let Ok(output) = std::process::Command::new("ibus").arg("engine").output() {
+                    let engine = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    // Identify if current engine is a Vietnamese input method
+                    if engine == "bamboo" || engine == "unikey" || engine == "bogo" || engine.contains("vietnamese") {
+                        active_ime = ActiveIme::Ibus(engine);
+                        // Switch to English layout in IBus
+                        let _ = std::process::Command::new("ibus")
+                            .args(&["engine", "xkb:us::eng"])
+                            .status();
+                    }
+                }
+            }
+        }
+        Self { active_ime }
+    }
+}
+
+impl Drop for ImeGuard {
+    fn drop(&mut self) {
+        #[cfg(target_os = "linux")]
+        match &self.active_ime {
+            ActiveIme::Fcitx(cmd) => {
+                // Restore active state
+                let _ = std::process::Command::new(*cmd)
+                    .arg("-o")
+                    .status();
+            }
+            ActiveIme::Ibus(original_engine) => {
+                // Restore IBus engine
+                let _ = std::process::Command::new("ibus")
+                    .args(&["engine", original_engine])
+                    .status();
+            }
+            ActiveIme::None => {}
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "windows")]
     auto_bootstrap_windows();
@@ -125,6 +212,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. Load Configuration and Setup Engine
     let config = Config::load();
+    let _ime_guard = if config.search.disable_ime.unwrap_or(false) {
+        Some(ImeGuard::new())
+    } else {
+        None
+    };
     let mut app = App::new(config);
 
     // 3. Initialize Terminal

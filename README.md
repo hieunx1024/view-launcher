@@ -123,4 +123,5 @@ border_color = "#4a5568"
 [search]
 max_depth = 3
 ignored_dirs = [".git", ".cargo", ".cache", "node_modules", "target"]
+disable_ime = true # Tự động tắt tạm thời bộ gõ tiếng Việt (Fcitx4/Fcitx5/IBus) khi mở launcher và khôi phục khi đóng (chỉ áp dụng trên Linux)
 ```
