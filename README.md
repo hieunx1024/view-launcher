@@ -1,25 +1,26 @@
-# view-launcher 🚀
+# view-launcher
 
-Trình khởi chạy ứng dụng và tệp tin siêu tối giản, tốc độ cực hạn (<1ms) viết bằng **Rust**. Hoạt động mượt mà trên cả **Linux** (Wayland/X11) và **Windows** thông qua giao diện dòng lệnh TUI (`ratatui` + `crossterm`).
+Trình khởi chạy ứng dụng và tệp tin tối giản, hiệu năng cao (<1ms) được phát triển bằng Rust. Hỗ trợ hoạt động đa nền tảng trên cả Linux (Wayland/X11) và Windows thông qua giao diện dòng lệnh TUI (sử dụng `ratatui` + `crossterm`).
 
 ![view-launcher](assets/screenshot.png)
 
 ---
 
-## ✨ Tính năng cốt lõi
-- ⚡ **Khởi động tức thì (<1ms):** Cơ chế quét tệp nền bất đồng bộ (background thread scan) không gây giật lag UI.
-- 🔍 **Tìm kiếm thông minh:** Tìm kiếm mờ (fuzzy search) cho cả Ứng dụng, Tệp tin & Thư mục.
-- 🇻🇳 **Hỗ trợ Tiếng Việt:** Tìm kiếm tiếng Việt không dấu tự động (ví dụ gõ `tai lieu` tìm ra `Tài liệu`).
-- 🔄 **Bật/Tắt thông minh (Toggle):** Nhấn phím tắt để mở, nhấn lại để tự động đóng (dùng TCP Loopback).
-- 🎨 **Tùy biến cao:** Cấu hình màu sắc, độ sâu tìm kiếm qua tệp `config.toml`.
+## Tính năng nổi bật
+
+- **Tốc độ khởi động vượt trội (<1ms):** Áp dụng cơ chế quét tệp nền bất đồng bộ (background thread scanning) giúp giao diện phản hồi tức thì, không xảy ra hiện tượng giật lag UI.
+- **Tìm kiếm thông minh:** Tích hợp tìm kiếm mờ (fuzzy search) cho cả Ứng dụng, Tệp tin và Thư mục.
+- **Tự động chuẩn hóa Tiếng Việt:** Hỗ trợ tìm kiếm tiếng Việt không dấu tự động (ví dụ: nhập `tai lieu` sẽ tự động so khớp và tìm ra thư mục `Tài liệu`).
+- **Cơ chế bật/tắt nhanh (Toggle):** Nhấn phím tắt để mở và nhấn lại phím tắt đó để tự động đóng (sử dụng TCP Loopback).
+- **Khả năng cấu hình cao:** Dễ dàng tùy biến bảng màu giao diện, độ sâu tìm kiếm thông qua tệp cấu hình `config.toml`.
 
 ---
 
-## 🛠️ Hướng dẫn cài đặt
+## Hướng dẫn cài đặt
 
 ### 1. Trên Arch Linux (AUR)
 
-Nếu bạn sử dụng **Arch Linux**, ứng dụng đã được đẩy lên **AUR** với tên gói là `view-launcher-git`. Bạn có thể cài đặt dễ dàng thông qua các AUR helper:
+Nếu sử dụng Arch Linux, bạn có thể cài đặt trực tiếp thông qua gói `view-launcher-git` trên AUR bằng các công cụ AUR helper:
 
 ```bash
 # Cài đặt bằng yay
@@ -29,7 +30,8 @@ yay -S view-launcher-git
 paru -S view-launcher-git
 ```
 
-Hoặc cài đặt thủ công qua Git & `makepkg`:
+Hoặc tiến hành cài đặt thủ công qua Git:
+
 ```bash
 git clone https://aur.archlinux.org/view-launcher-git.git
 cd view-launcher-git
@@ -40,70 +42,75 @@ makepkg -si
 
 ### 2. Biên dịch từ nguồn (Các hệ điều hành khác)
 
-Bạn chỉ cần biên dịch một lần để tạo ra tệp chạy duy nhất, không phụ thuộc vào bất kỳ thư viện ngoài nào.
+Biên dịch trực tiếp từ mã nguồn để tạo ra một tệp thực thi duy nhất, không phụ thuộc vào bất kỳ thư viện ngoài nào:
 
 ```bash
-# Biên dịch bản release tối ưu
 cargo build --release
 ```
-Tệp nhị phân sau khi biên dịch nằm tại: `target/release/view-launcher` (hoặc `.exe` trên Windows).
+
+Tệp nhị phân sau khi biên dịch sẽ nằm tại: `target/release/view-launcher` (hoặc `view-launcher.exe` trên Windows).
 
 ---
 
-## 🖥️ Hướng dẫn chạy và Thiết lập phím tắt
+## Cấu hình phím tắt và Khởi chạy
 
 ### 1. Trên Linux (Sway / i3 / Hyprland)
 
-Chép tệp chạy vào thư mục hệ thống cục bộ:
+Chép tệp thực thi vào thư mục hệ thống cục bộ:
+
 ```bash
 cp target/release/view-launcher ~/.local/bin/
 ```
 
-Mở tệp cấu hình của Window Manager (ví dụ `~/.config/sway/config`) và thêm phím tắt `Ctrl + Space`:
+Mở tệp cấu hình của Window Manager (ví dụ: `~/.config/sway/config`) và cấu hình cửa sổ nổi kèm phím tắt gọi nhanh:
+
 ```plaintext
 # Thiết lập cửa sổ nổi cho launcher
 for_window [app_id="floating_launcher"] floating enable, resize set 700 450, move position center
 
-# Gán phím tắt gọi launcher trong terminal mặc định (ở đây ví dụ là kitty)
-bindsym ctrl+space exec $term --app-id floating_launcher -e view-launcher
+# Gán phím tắt gọi launcher trong terminal mặc định (ví dụ: kitty)
+# Sử dụng tiền tố env để ngắt kết nối bộ gõ IME (Fcitx/IBus), tránh hiện tượng lỗi giao diện (preedit area)
+bindsym ctrl+space exec env XMODIFIERS="" GTK_IM_MODULE=none QT_IM_MODULE=none $term --app-id floating_launcher -e view-launcher
 ```
+
+*Lưu ý về bộ gõ tiếng Việt:* Trong các ứng dụng TUI chạy trong terminal, nếu bật bộ gõ tiếng Việt, các ký tự bạn nhập có thể bị hiển thị tạm dưới đáy terminal (preedit) trước khi được chèn vào ô tìm kiếm. Việc thêm tiền tố `env XMODIFIERS="" GTK_IM_MODULE=none QT_IM_MODULE=none` trước lệnh gọi terminal sẽ vô hiệu hóa hoàn toàn IME cho riêng cửa sổ này, giúp nhập liệu tiếng Anh trực tiếp và siêu tốc, trong khi các ứng dụng khác vẫn gõ tiếng Việt bình thường.
 
 ---
 
 ### 2. Trên Windows
 
-Biên dịch dự án trên Windows sẽ tạo ra file **`view-launcher.exe`** (dung lượng ~1.5MB). Bạn có thể chép file này vào bất kỳ thư mục nào trong máy.
+Sau khi biên dịch, bạn có thể lưu trữ file thực thi `view-launcher.exe` ở bất kỳ thư mục nào trên hệ thống. 
 
-**🚀 Tính năng Cài đặt Tự động (Mới):**
-Ứng dụng được lập trình để **tự động cấu hình hệ thống** ngay trong lần chạy đầu tiên:
-- **Tự khởi chạy (Startup):** Tự động tạo lối tắt trong thư mục khởi động của Windows (`shell:startup`).
-- **Phím tắt toàn cục (Global Hotkey):** Tự động liên kết tổ hợp phím **`Ctrl + Alt + Space`** để gọi nhanh Windows Terminal chứa launcher từ bất kỳ màn hình nào!
+Ứng dụng hỗ trợ cơ chế tự động thiết lập hệ thống trong lần chạy đầu tiên:
+- **Tự khởi chạy cùng hệ thống (Startup):** Tự động tạo shortcut khởi chạy cùng Windows trong thư mục `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`.
+- **Đăng ký phím tắt toàn cục (Global Hotkey):** Tự động gán tổ hợp phím `Ctrl + Alt + Space` để mở nhanh Windows Terminal chứa launcher từ bất kỳ màn hình nào.
 
-Bạn chỉ cần kích hoạt nhấp đúp chạy `view-launcher.exe` một lần, toàn bộ hệ thống phím tắt và Startup sẽ được đăng ký ngầm hoàn toàn tự động.
+Để kích hoạt, bạn chỉ cần chạy trực tiếp `view-launcher.exe` một lần, toàn bộ phím tắt và cấu hình khởi động sẽ được thiết lập ngầm tự động.
 
 ---
 
-### 3. Tùy chọn nâng cao (Gán phím tắt `Ctrl + Space` trên Windows)
+### 3. Tùy chọn phím tắt nâng cao trên Windows (`Ctrl + Space`)
 
-Nếu bạn muốn sử dụng phím tắt cực ngắn như **`Ctrl + Space`** (giống hệt trên Linux Sway) thay vì phím tắt mặc định hệ thống `Ctrl + Alt + Space`, bạn có thể sử dụng công cụ **AutoHotkey** (miễn phí, siêu nhẹ):
+Nếu muốn sử dụng phím tắt ngắn gọn `Ctrl + Space` thay cho phím tắt mặc định `Ctrl + Alt + Space`, bạn có thể cấu hình thông qua công cụ AutoHotkey:
 
-1. Cài đặt AutoHotkey, tạo một file script `launcher.ahk` có nội dung sau:
+1. Cài đặt AutoHotkey và tạo tệp kịch bản `launcher.ahk` với nội dung:
    ```autohotkey
    ^Space::
    Run, wt.exe --title "floating_launcher" view-launcher.exe
    return
    ```
-2. Lưu file script này vào thư mục Khởi động tự động (`shell:startup`) để nó tự chạy ngầm cùng Windows mỗi khi mở máy.
+2. Lưu tệp kịch bản này vào thư mục Khởi động tự động của Windows (`shell:startup`) để tự động kích hoạt cùng hệ thống.
 
 ---
 
-## ⚙️ Cấu hình tùy biến (`config.toml`)
+## Cấu hình tùy biến (`config.toml`)
 
-Ứng dụng tự động nạp cấu hình tùy biến của bạn tại:
+Ứng dụng sẽ tự động tải các cấu hình tùy chỉnh từ các thư mục mặc định sau:
 - **Linux:** `~/.config/view-launcher/config.toml`
 - **Windows:** `%APPDATA%\view-launcher\config.toml`
 
-**Mẫu cấu hình tối giản:**
+Mẫu cấu hình tham khảo:
+
 ```toml
 [theme]
 query_color = "cyan"
