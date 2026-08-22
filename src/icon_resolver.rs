@@ -1,12 +1,23 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use crate::launcher::LauncherItem;
+use crate::launcher::{LauncherItem, ItemType};
+
+const SVG_FOLDER: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" fill="#EBCB8B" stroke="#D08770" stroke-width="1.2"/></svg>"##;
+const SVG_CODE: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="4" fill="#A78BFA22" stroke="#A78BFA" stroke-width="1.5"/><path d="M9 8.5L5.5 12 9 15.5M15 8.5l3.5 3.5L15 15.5M13 7l-2 10" stroke="#A78BFA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>"##;
+const SVG_DOCUMENT: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3h8l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" fill="#7AA2F722" stroke="#7AA2F7" stroke-width="1.5"/><path d="M14 3v5h5M9 12h6M9 16h4" stroke="#7AA2F7" stroke-width="1.5" stroke-linecap="round"/></svg>"##;
+const SVG_IMAGE: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="4" fill="#2AC3DE22" stroke="#2AC3DE" stroke-width="1.5"/><circle cx="8.5" cy="8.5" r="1.5" fill="#2AC3DE"/><path d="M21 15l-5-5L5 21" stroke="#2AC3DE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>"##;
+const SVG_PDF: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3h8l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" fill="#F7768E22" stroke="#F7768E" stroke-width="1.5"/><path d="M14 3v5h5" stroke="#F7768E" stroke-width="1.5"/><text x="6.5" y="16" fill="#F7768E" font-size="6" font-weight="bold" font-family="sans-serif">PDF</text></svg>"##;
+const SVG_ARCHIVE: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4" width="16" height="16" rx="3" fill="#FBBF2422" stroke="#FBBF24" stroke-width="1.5"/><path d="M10 4v16M14 4v16M10 7h4M10 10h4M10 13h4M10 16h4" stroke="#FBBF24" stroke-width="1.2"/></svg>"##;
+const SVG_AUDIO: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" fill="#BB9AF722" stroke="#BB9AF7" stroke-width="1.5"/><path d="M10 15a2 2 0 102-2V7h4" stroke="#BB9AF7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>"##;
+const SVG_VIDEO: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="16" rx="3" fill="#7DCFFF22" stroke="#7DCFFF" stroke-width="1.5"/><path d="M10 9l5 3-5 3V9z" fill="#7DCFFF"/></svg>"##;
+const SVG_GENERIC: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 3h8l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" fill="#9AA5CE22" stroke="#9AA5CE" stroke-width="1.5"/><path d="M14 3v5h5" stroke="#9AA5CE" stroke-width="1.5"/></svg>"##;
 
 /// High-performance thread-safe icon resolver with O(1) in-memory index and pre-decoding cache.
 pub struct IconResolver {
     icon_path_index: Arc<RwLock<HashMap<String, PathBuf>>>,
     image_cache: Arc<RwLock<HashMap<String, Option<slint::Image>>>>,
+    file_type_cache: Arc<RwLock<HashMap<&'static str, slint::Image>>>,
 }
 
 impl IconResolver {
@@ -57,7 +68,82 @@ impl IconResolver {
         Self {
             icon_path_index: Arc::new(RwLock::new(path_index)),
             image_cache: Arc::new(RwLock::new(HashMap::new())),
+            file_type_cache: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Resolves file type icons (.rs, .png, .pdf, folder, etc.) with instant caching.
+    pub fn resolve_file_type_icon(&self, path: &Path, item_type: ItemType) -> Option<slint::Image> {
+        let category_key = match item_type {
+            ItemType::Dir => "folder",
+            ItemType::File => {
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                match ext.as_str() {
+                    "txt" | "md" | "log" | "rtf" | "csv" | "tsv" | "doc" | "docx" | "odt" => "document",
+                    "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" | "tiff" => "image",
+                    "rs" | "js" | "ts" | "jsx" | "tsx" | "py" | "toml" | "json" | "c" | "cpp" | "h" | "hpp" | "go" | "html" | "css" | "sh" | "bash" | "zsh" | "yaml" | "yml" | "sql" | "java" | "kt" | "lua" | "vue" | "svelte" => "code",
+                    "pdf" => "pdf",
+                    "zip" | "tar" | "gz" | "7z" | "rar" | "xz" | "bz2" | "zst" | "iso" => "archive",
+                    "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "wma" => "audio",
+                    "mp4" | "mkv" | "mov" | "avi" | "webm" | "flv" | "wmv" => "video",
+                    _ => "generic",
+                }
+            }
+            _ => return None,
+        };
+
+        // 1. Instant Cache Hit
+        if let Ok(guard) = self.file_type_cache.read() {
+            if let Some(img) = guard.get(category_key) {
+                return Some(img.clone());
+            }
+        }
+
+        // 2. Render SVG for type
+        let svg_str = match category_key {
+            "folder" => SVG_FOLDER,
+            "document" => SVG_DOCUMENT,
+            "image" => SVG_IMAGE,
+            "code" => SVG_CODE,
+            "pdf" => SVG_PDF,
+            "archive" => SVG_ARCHIVE,
+            "audio" => SVG_AUDIO,
+            "video" => SVG_VIDEO,
+            _ => SVG_GENERIC,
+        };
+
+        let slint_img = Self::rasterize_svg_bytes(svg_str.as_bytes(), 32)?;
+
+        if let Ok(mut guard) = self.file_type_cache.write() {
+            guard.insert(category_key, slint_img.clone());
+        }
+
+        Some(slint_img)
+    }
+
+    pub fn rasterize_svg_bytes(svg_data: &[u8], size_px: u32) -> Option<slint::Image> {
+        let opt = usvg::Options::default();
+        let tree = usvg::Tree::from_data(svg_data, &opt).ok()?;
+        let mut pixmap = tiny_skia::Pixmap::new(size_px, size_px)?;
+        let size = tree.size();
+        let sx = size_px as f32 / size.width();
+        let sy = size_px as f32 / size.height();
+        let scale = sx.min(sy);
+        let transform = tiny_skia::Transform::from_scale(scale, scale);
+        resvg::render(&tree, transform, &mut pixmap.as_mut());
+        
+        let mut pixel_buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(size_px, size_px);
+        let raw_slice = pixmap.data();
+        let dest = pixel_buf.make_mut_slice();
+        for (src_chunk, dest_pixel) in raw_slice.chunks_exact(4).zip(dest.iter_mut()) {
+            *dest_pixel = slint::Rgba8Pixel {
+                r: src_chunk[0],
+                g: src_chunk[1],
+                b: src_chunk[2],
+                a: src_chunk[3],
+            };
+        }
+        Some(slint::Image::from_rgba8(pixel_buf))
     }
 
     /// Preloads and decodes icons for all apps in the background.

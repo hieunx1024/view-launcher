@@ -443,13 +443,13 @@ export component AppWindow inherits Window {
 
                                     // Background: 10% Opacity per Category
                                     background: (item.category == "Chat") ? #34D3991A :
-                                                ((item.category == "System") ? #FBBF241A :
+                                                ((item.category == "System" || item.category == "Folder") ? #FBBF241A :
                                                 ((item.category == "IDE" || item.category == "Development") ? #A78BFA1A :
                                                 ((item.category == "Calc") ? #10B9811A : #38BDF81A)));
 
                                     // Border: Accent Color per Category
                                     border-color: (item.category == "Chat") ? #34D39940 :
-                                                  ((item.category == "System") ? #FBBF2440 :
+                                                  ((item.category == "System" || item.category == "Folder") ? #FBBF2440 :
                                                   ((item.category == "IDE" || item.category == "Development") ? #A78BFA40 :
                                                   ((item.category == "Calc") ? #10B98140 : #38BDF840)));
 
@@ -460,7 +460,7 @@ export component AppWindow inherits Window {
                                             text: item.category;
                                             // Text Color per Category
                                             color: (item.category == "Chat") ? #34D399 :
-                                                   ((item.category == "System") ? #FBBF24 :
+                                                   ((item.category == "System" || item.category == "Folder") ? #FBBF24 :
                                                    ((item.category == "IDE" || item.category == "Development") ? #A78BFA :
                                                    ((item.category == "Calc") ? #10B981 : #38BDF8)));
                                             font-size: 11px;

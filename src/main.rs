@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -117,14 +117,29 @@ fn populate_items(
 
     let limit = (ui.get_cfg_max_results() as usize).clamp(4, 10);
     for (item, _indices) in results.into_iter().take(limit) {
-        let slint_icon = if item.item_type == launcher::ItemType::App {
-            icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path)
-        } else {
-            None
+        let (slint_icon, category) = match item.item_type {
+            launcher::ItemType::App => {
+                let icon = icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
+                (icon, item.get_category_tag().to_string())
+            }
+            launcher::ItemType::Dir => {
+                let icon = icon_resolver.resolve_file_type_icon(Path::new(&item.exec_or_path), launcher::ItemType::Dir);
+                (icon, "Folder".to_string())
+            }
+            launcher::ItemType::File => {
+                let icon = icon_resolver.resolve_file_type_icon(Path::new(&item.exec_or_path), launcher::ItemType::File);
+                let size_str = std::fs::metadata(&item.exec_or_path)
+                    .map(|m| launcher::format_file_size(m.len()))
+                    .unwrap_or_else(|_| "File".to_string());
+                (icon, size_str)
+            }
+            launcher::ItemType::Calc => {
+                (None, "Calc".to_string())
+            }
         };
+
         let has_icon = slint_icon.is_some();
         let icon_img = slint_icon.unwrap_or_default();
-        let category = item.get_category_tag().to_string();
 
         let item_type_str = match item.item_type {
             launcher::ItemType::App => "app",

@@ -66,6 +66,21 @@ impl LauncherItem {
     }
 }
 
+pub fn format_file_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut size = bytes as f64;
+    let mut unit_idx = 0;
+    while size >= 1024.0 && unit_idx < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit_idx += 1;
+    }
+    if unit_idx == 0 {
+        format!("{} {}", bytes, UNITS[0])
+    } else {
+        format!("{:.1} {}", size, UNITS[unit_idx])
+    }
+}
+
 pub fn open_config_file() {
     let config_path = crate::config::Config::get_config_path();
     #[cfg(not(target_os = "windows"))]
@@ -962,6 +977,16 @@ mod tests {
         }
         let elapsed_total = start.elapsed();
         assert!(elapsed_total.as_millis() < 50, "Total search + icon took too long: {:?}", elapsed_total);
+    }
+
+    #[test]
+    fn test_format_file_size() {
+        assert_eq!(format_file_size(0), "0 B");
+        assert_eq!(format_file_size(500), "500 B");
+        assert_eq!(format_file_size(1024), "1.0 KB");
+        assert_eq!(format_file_size(2450), "2.4 KB");
+        assert_eq!(format_file_size(1048576), "1.0 MB");
+        assert_eq!(format_file_size(1073741824), "1.0 GB");
     }
 }
 
