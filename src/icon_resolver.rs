@@ -15,28 +15,23 @@ impl IconResolver {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let search_prefixes = [
-                "/usr/share/icons/hicolor/48x48/apps",
-                "/usr/share/icons/hicolor/scalable/apps",
-                "/usr/share/icons/hicolor/64x64/apps",
-                "/usr/share/icons/hicolor/32x32/apps",
-                "/usr/share/icons/hicolor/128x128/apps",
-                "/usr/share/icons/hicolor/256x256/apps",
-                "/usr/share/icons/Yaru/48x48/apps",
-                "/usr/share/icons/Yaru/scalable/apps",
-                "/usr/share/icons/Adwaita/48x48/apps",
-                "/usr/share/icons/Adwaita/scalable/apps",
+            let search_roots = [
+                "/usr/share/icons/Yaru",
+                "/usr/share/icons/hicolor",
+                "/usr/share/icons/Adwaita",
+                "/usr/share/icons/Humanity",
+                "/usr/share/icons/HighContrast",
                 "/usr/share/pixmaps",
             ];
 
-            for prefix in &search_prefixes {
-                if let Ok(entries) = std::fs::read_dir(prefix) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
+            for root in &search_roots {
+                for entry in walkdir::WalkDir::new(root).max_depth(4).into_iter().flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
                         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                             let key = stem.to_lowercase();
                             if !path_index.contains_key(&key) {
-                                path_index.insert(key, path);
+                                path_index.insert(key, path.to_path_buf());
                             }
                         }
                     }
@@ -44,12 +39,15 @@ impl IconResolver {
             }
 
             if let Some(home) = dirs::home_dir() {
-                let user_icons = home.join(".local/share/icons/hicolor/48x48/apps");
-                if let Ok(entries) = std::fs::read_dir(user_icons) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
+                let user_icons = home.join(".local/share/icons");
+                for entry in walkdir::WalkDir::new(user_icons).max_depth(4).into_iter().flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
                         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            path_index.insert(stem.to_lowercase(), path);
+                            let key = stem.to_lowercase();
+                            if !path_index.contains_key(&key) {
+                                path_index.insert(key, path.to_path_buf());
+                            }
                         }
                     }
                 }

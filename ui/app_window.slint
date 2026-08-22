@@ -107,20 +107,25 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    // Text Input Area
+                    // Text Input Area with Exact Left Alignment
                     Rectangle {
                         horizontal-stretch: 1;
 
                         Text {
+                            x: 0px;
+                            width: 100%;
                             text: root.is_file_mode ? "Type to search files (e.g. notes.pdf, ~/Projects)..." : "Search apps, type @f for files, or 500*12...";
                             color: #565f89;
                             font-size: 14px;
                             font-italic: true;
                             vertical-alignment: center;
+                            horizontal-alignment: left;
                             visible: root.search_text == "";
                         }
 
                         search_input := TextInput {
+                            x: 0px;
+                            width: 100%;
                             text: root.search_text;
                             single-line: true;
                             font-size: 15px;
@@ -128,6 +133,7 @@ export component AppWindow inherits Window {
                             selection-background-color: #3d59a1;
                             selection-foreground-color: #ffffff;
                             vertical-alignment: center;
+                            horizontal-alignment: left;
 
                             edited => {
                                 root.search_text = self.text;
