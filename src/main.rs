@@ -222,17 +222,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(icon) = app_icon_opt {
             winit_window.set_window_icon(Some(icon));
         }
-        // Center window on screen
-        if let Some(monitor) = winit_window.current_monitor().or_else(|| winit_window.primary_monitor()) {
-            let screen_size = monitor.size();
-            let scale_factor = monitor.scale_factor();
-            let window_width = (680.0 * scale_factor) as u32;
-            let window_height = (520.0 * scale_factor) as u32;
-            let pos_x = screen_size.width.saturating_sub(window_width) / 2;
-            let pos_y = screen_size.height.saturating_sub(window_height) / 2;
-            winit_window.set_outer_position(i_slint_backend_winit::winit::dpi::PhysicalPosition::new(pos_x as i32, pos_y as i32));
-        }
     });
+
+    let center_window = |ui: &AppWindow| {
+        ui.window().with_winit_window(|winit_window| {
+            let monitor_opt = winit_window
+                .current_monitor()
+                .or_else(|| winit_window.primary_monitor())
+                .or_else(|| winit_window.available_monitors().next());
+
+            if let Some(monitor) = monitor_opt {
+                let screen_size = monitor.size();
+                let scale_factor = monitor.scale_factor();
+                let window_width = (680.0 * scale_factor) as u32;
+                let window_height = (520.0 * scale_factor) as u32;
+                let pos_x = screen_size.width.saturating_sub(window_width) / 2;
+                let pos_y = screen_size.height.saturating_sub(window_height) / 2;
+                winit_window.set_outer_position(i_slint_backend_winit::winit::dpi::PhysicalPosition::new(pos_x as i32, pos_y as i32));
+            }
+        });
+    };
+
+    center_window(&ui);
+
+    // Re-center when Wayland surface configure event resolves
+    let center_timer = slint::Timer::default();
+    {
+        let ui_weak = ui.as_weak();
+        center_timer.start(
+            slint::TimerMode::SingleShot,
+            std::time::Duration::from_millis(60),
+            move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    center_window(&ui);
+                }
+            },
+        );
+    }
 
     // 4. Initial Population
     let current_results = Arc::new(std::sync::RwLock::new(populate_items(
