@@ -1,7 +1,14 @@
 [package]
 name = "view-launcher"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
+authors = ["Hieu Nguyen <hieunx@outlook.com>"]
+description = "A minimalist, high-performance terminal TUI app & file launcher in Rust (<1ms)"
+license = "MIT"
+repository = "https://github.com/hieunx1024/view-launcher"
+readme = "README.md"
+keywords = ["launcher", "tui", "ratatui", "wayland", "fuzzy-search"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 ratatui = "0.26"
@@ -9,6 +16,25 @@ crossterm = { version = "0.27", features = ["event-stream"] }
 fuzzy-matcher = "0.3.7"
 walkdir = "2.5"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 toml = "0.8"
 dirs = "5.0"
 
+[package.metadata.deb]
+name = "view-launcher"
+maintainer = "Hieu Nguyen <hieunx@outlook.com>"
+copyright = "2026, Hieu Nguyen <hieunx@outlook.com>"
+license-file = ["README.md", "4"]
+extended-description = """\
+A minimalist, high-performance terminal TUI app & file launcher in Rust (<1ms). \
+Supports Wayland, X11, and Windows with smart fuzzy search, Vietnamese accent normalization, \
+inline calculator, and configurable paths."""
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/view-launcher", "usr/bin/view-launcher", "755"],
+    ["assets/view-launcher.desktop", "usr/share/applications/view-launcher.desktop", "644"],
+    ["assets/view-launcher.svg", "usr/share/icons/hicolor/scalable/apps/view-launcher.svg", "644"],
+    ["assets/view-launcher.png", "usr/share/pixmaps/view-launcher.png", "644"],
+    ["README.md", "usr/share/doc/view-launcher/README.md", "644"],
+]

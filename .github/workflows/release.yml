@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release (e.g. v0.2.0)'
+        required: false
+        default: 'v0.2.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux (.deb & .tar.gz)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Build Release Binary
+        run: cargo build --release --locked
+
+      - name: Build Debian Package (.deb)
+        run: cargo deb --no-build
+
+      - name: Package Linux Artifacts
+        run: |
+          mkdir -p dist
+          cp target/debian/*.deb dist/
+          cp target/release/view-launcher dist/view-launcher-linux-x86_64
+          tar -czvf dist/view-launcher-linux-x86_64.tar.gz -C target/release view-launcher
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: dist/*
+
+  build-windows:
+    name: Build Windows (.exe, .zip & setup)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Release Binary
+        run: cargo build --release --locked
+
+      - name: Compile Inno Setup Installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\windows\setup.iss
+
+      - name: Package Windows Artifacts
+        shell: pwsh
+        run: |
+          mkdir dist
+          Copy-Item "target\release\view-launcher.exe" -Destination "dist\view-launcher.exe"
+          Copy-Item "assets\view-launcher.ico" -Destination "dist\view-launcher.ico"
+          Compress-Archive -Path target\release\view-launcher.exe, assets\view-launcher.ico, README.md, installer\windows\install.ps1 -DestinationPath dist\view-launcher-windows-x86_64.zip
+          if (Test-Path "installer\windows\Output\view-launcher-setup.exe") {
+            Copy-Item "installer\windows\Output\view-launcher-setup.exe" -Destination "dist\view-launcher-setup.exe"
+          }
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-dist
+          path: dist/*
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-dist
+          path: release-assets
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-dist
+          path: release-assets
+
+      - name: Determine Tag
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Release ${{ steps.vars.outputs.tag }}
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          body: |
+            ### 🚀 View Launcher ${{ steps.vars.outputs.tag }}
+
+            A minimalist, high-performance terminal TUI app & file launcher in Rust (<1ms).
+
+            #### 📦 Tải về các file cài đặt:
+            - **Windows (Khuyên dùng):**
+              - 🚀 **`view-launcher-setup.exe`**: Bộ cài đặt tự động (Tự cấu hình PATH và phím tắt `Ctrl+Alt+Space` khởi động cùng Windows).
+              - ⚡ **`view-launcher.exe`**: File thực thi độc lập (Portable binary).
+              - 📦 **`view-launcher-windows-x86_64.zip`**: File nén chứa binary và script cài đặt `install.ps1`.
+            - **Ubuntu / Debian / Linux:**
+              - 🐧 **`view-launcher_0.2.0_amd64.deb`**: Gói cài đặt Debian/Ubuntu (`sudo dpkg -i view-launcher_*.deb`).
+              - 📦 **`view-launcher-linux-x86_64.tar.gz`**: File nén nhị phân cho Linux x86_64.
+              - ⚡ **`view-launcher-linux-x86_64`**: File thực thi nhị phân độc lập.

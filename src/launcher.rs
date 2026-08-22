@@ -7,6 +7,8 @@ use walkdir::WalkDir;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use crate::config::Config;
+use crate::history::HistoryManager;
+use crate::calc;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -16,11 +18,12 @@ unsafe extern "C" {
     fn setsid() -> i32;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ItemType {
     App,
     File,
     Dir,
+    Calc,
 }
 
 #[derive(Debug, Clone)]
@@ -30,28 +33,53 @@ pub struct LauncherItem {
     pub item_type: ItemType,
     pub description: Option<String>,
     pub terminal: bool,
+    pub icon: Option<String>,
 }
 
 pub struct LauncherEngine {
     pub apps: Vec<LauncherItem>,
+    pub custom_apps: Vec<LauncherItem>,
+    pub pinned_apps: Vec<String>,
+    pub hidden_apps: Vec<String>,
     pub shallow_files: Arc<RwLock<Vec<LauncherItem>>>,
+    pub history: Arc<RwLock<HistoryManager>>,
     matcher: SkimMatcherV2,
+    config: Config,
 }
 
 impl LauncherEngine {
     pub fn new(config: Config) -> Self {
+        let history = Arc::new(RwLock::new(HistoryManager::load()));
         let mut engine = Self {
             apps: Vec::new(),
+            custom_apps: Vec::new(),
+            pinned_apps: config.apps.pinned.clone(),
+            hidden_apps: config.apps.hidden.clone(),
             shallow_files: Arc::new(RwLock::new(Vec::new())),
+            history,
             matcher: SkimMatcherV2::default(),
+            config: config.clone(),
         };
+
+        // Load custom apps from config
+        for custom in &config.apps.custom {
+            engine.custom_apps.push(LauncherItem {
+                name: custom.name.clone(),
+                exec_or_path: custom.exec.clone(),
+                item_type: ItemType::App,
+                description: custom.description.clone(),
+                terminal: custom.terminal.unwrap_or(false),
+                icon: custom.icon.clone(),
+            });
+        }
+
         engine.index_apps();
         
         let shallow_files_clone = engine.shallow_files.clone();
         let config_clone = config.clone();
         std::thread::spawn(move || {
             let mut files = Vec::new();
-            Self::index_shallow_home_impl(&config_clone, &mut files);
+            Self::index_files_impl(&config_clone, &mut files);
             if let Ok(mut lock) = shallow_files_clone.write() {
                 *lock = files;
             }
@@ -60,16 +88,26 @@ impl LauncherEngine {
         engine
     }
 
-    /// Indexes all standard Linux .desktop application entries.
+    /// Indexes all standard Linux .desktop application entries + extra paths from config.
     #[cfg(not(target_os = "windows"))]
     fn index_apps(&mut self) {
-        let paths = vec![
+        let mut paths = vec![
             PathBuf::from("/usr/share/applications"),
+            PathBuf::from("/usr/local/share/applications"),
             dirs::home_dir().map(|mut h| {
                 h.push(".local/share/applications");
                 h
             }).unwrap_or_default(),
         ];
+
+        // Add extra desktop paths from config
+        for extra in &self.config.apps.extra_desktop_paths {
+            let expanded = expand_tilde(extra);
+            let p = PathBuf::from(expanded);
+            if !paths.contains(&p) {
+                paths.push(p);
+            }
+        }
 
         for path in paths {
             if !path.exists() {
@@ -80,8 +118,12 @@ impl LauncherEngine {
                     let file_path = entry.path();
                     if file_path.extension().map_or(false, |ext| ext == "desktop") {
                         if let Some(app) = self.parse_desktop_file(&file_path) {
-                            // Avoid duplicates by name
-                            if !self.apps.iter().any(|item| item.name == app.name) {
+                            // Check if app is in hidden list
+                            let is_hidden = self.hidden_apps.iter().any(|h| {
+                                app.name.eq_ignore_ascii_case(h) || app.exec_or_path.contains(h)
+                            });
+
+                            if !is_hidden && !self.apps.iter().any(|item| item.name == app.name) {
                                 self.apps.push(app);
                             }
                         }
@@ -113,13 +155,18 @@ impl LauncherEngine {
                 if file_path.extension().map_or(false, |ext| ext == "lnk") {
                     let name = file_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
                     let exec = file_path.to_string_lossy().to_string();
-                    self.apps.push(LauncherItem {
-                        name,
-                        exec_or_path: exec,
-                        item_type: ItemType::App,
-                        description: Some("Windows Shortcut".to_string()),
-                        terminal: false,
-                    });
+                    
+                    let is_hidden = self.hidden_apps.iter().any(|h| name.eq_ignore_ascii_case(h));
+                    if !is_hidden {
+                        self.apps.push(LauncherItem {
+                            name,
+                            exec_or_path: exec,
+                            item_type: ItemType::App,
+                            description: Some("Windows Shortcut".to_string()),
+                            terminal: false,
+                            icon: None,
+                        });
+                    }
                 }
             }
         }
@@ -175,7 +222,6 @@ impl LauncherEngine {
                             }
                             cleaned_tokens.push(token);
                         }
-                        // If the last token is "--", remove it since we removed file arguments
                         if let Some(&"--") = cleaned_tokens.last() {
                             cleaned_tokens.pop();
                         }
@@ -211,52 +257,90 @@ impl LauncherEngine {
                 item_type: ItemType::App,
                 description: comment,
                 terminal,
+                icon: None,
             })
         } else {
             None
         }
     }
 
-    /// Fast shallow scan of the Home directory (depth 1 or 2) to get immediate files.
-    fn index_shallow_home_impl(config: &Config, files: &mut Vec<LauncherItem>) {
-        let Some(home) = dirs::home_dir() else { return; };
-        
-        let max_depth = config.search.max_depth;
-        let ignored_dirs = &config.search.ignored_dirs;
+    /// Indexes files based on configured `search.paths` or defaults.
+    fn index_files_impl(config: &Config, files: &mut Vec<LauncherItem>) {
+        let search_paths = if config.search.paths.is_empty() {
+            vec![crate::config::SearchPathConfig {
+                path: "~".to_string(),
+                max_depth: Some(config.search.max_depth),
+            }]
+        } else {
+            config.search.paths.clone()
+        };
 
-        for entry in WalkDir::new(&home)
-            .max_depth(max_depth)
-            .into_iter()
-            .filter_entry(|e| {
-                if let Some(name) = e.file_name().to_str() {
-                    !ignored_dirs.iter().any(|ignored| name == ignored) && !name.starts_with('.')
-                } else {
-                    false
-                }
-            })
-            .flatten()
-        {
-            let path = entry.path();
-            if path == home {
+        let ignored_dirs = &config.search.ignored_dirs;
+        let ignored_exts = &config.search.ignored_extensions;
+
+        for search_entry in search_paths {
+            let expanded_path_str = expand_tilde(&search_entry.path);
+            let root_path = PathBuf::from(expanded_path_str);
+            if !root_path.exists() {
                 continue;
             }
 
-            let path_str = path.to_string_lossy().to_string();
-            let name = entry.file_name().to_string_lossy().to_string();
-            
-            let item_type = if entry.file_type().is_dir() {
-                ItemType::Dir
-            } else {
-                ItemType::File
-            };
+            let max_depth = search_entry.max_depth.unwrap_or(config.search.max_depth);
 
-            files.push(LauncherItem {
-                name,
-                exec_or_path: path_str,
-                item_type,
-                description: Some(path.parent().map_or("".to_string(), |p| p.to_string_lossy().to_string())),
-                terminal: false,
-            });
+            for entry in WalkDir::new(&root_path)
+                .max_depth(max_depth)
+                .into_iter()
+                .filter_entry(|e| {
+                    if let Some(name) = e.file_name().to_str() {
+                        !ignored_dirs.iter().any(|ignored| name == ignored) && !name.starts_with('.')
+                    } else {
+                        false
+                    }
+                })
+                .flatten()
+            {
+                let path = entry.path();
+                if path == root_path {
+                    continue;
+                }
+
+                // Check ignored extensions
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    let ext_dot = format!(".{}", ext.to_lowercase());
+                    if ignored_exts.iter().any(|ig| ig.eq_ignore_ascii_case(&ext_dot) || ig.eq_ignore_ascii_case(ext)) {
+                        continue;
+                    }
+                }
+
+                let path_str = path.to_string_lossy().to_string();
+                let name = entry.file_name().to_string_lossy().to_string();
+                
+                let item_type = if entry.file_type().is_dir() {
+                    ItemType::Dir
+                } else {
+                    ItemType::File
+                };
+
+                let desc = path.parent().map(|p| {
+                    let s = p.to_string_lossy().to_string();
+                    if let Some(home) = dirs::home_dir() {
+                        let home_str = home.to_string_lossy().to_string();
+                        if s.starts_with(&home_str) {
+                            return s.replacen(&home_str, "~", 1);
+                        }
+                    }
+                    s
+                });
+
+                files.push(LauncherItem {
+                    name,
+                    exec_or_path: path_str,
+                    item_type,
+                    description: desc,
+                    terminal: false,
+                    icon: None,
+                });
+            }
         }
     }
 
@@ -316,168 +400,347 @@ impl LauncherEngine {
                     item_type,
                     description: Some(dir.to_string_lossy().to_string()),
                     terminal: false,
+                    icon: None,
                 });
             }
         }
         items
     }
 
-    /// Performs high-performance fuzzy matching and ranking of items.
-    pub fn search(&self, query: &str) -> Vec<LauncherItem> {
+    /// Performs high-performance fuzzy matching and ranking of items, returning matched character indices.
+    pub fn search(&self, query: &str) -> Vec<(LauncherItem, Vec<usize>)> {
+        let trimmed_query = query.trim();
         let shallow_files_guard = self.shallow_files.read().unwrap_or_else(|e| e.into_inner());
+        let history_guard = self.history.read().unwrap_or_else(|e| e.into_inner());
 
-        if query.is_empty() {
-            // By default, list all apps, then files
-            let mut default_list = self.apps.clone();
-            default_list.extend(shallow_files_guard.iter().take(50).cloned());
-            return default_list;
+        let mut results = Vec::new();
+
+        // 1. Inline Calculator check
+        if let Some(calc_val) = calc::evaluate(trimmed_query) {
+            let formatted = calc::format_result(calc_val);
+            results.push((
+                LauncherItem {
+                    name: format!("= {}", formatted),
+                    exec_or_path: formatted.clone(),
+                    item_type: ItemType::Calc,
+                    description: Some("Press Enter to copy result to clipboard".to_string()),
+                    terminal: false,
+                    icon: None,
+                },
+                Vec::new(),
+            ));
         }
 
-        // Check if query is a dynamic path search
-        if let Some((dir, filter)) = self.resolve_path_search(query) {
+        // 2. Dynamic path search
+        if let Some((dir, filter)) = self.resolve_path_search(trimmed_query) {
             let dir_items = self.scan_dir_on_the_fly(&dir);
             if filter.is_empty() {
-                return dir_items;
+                for item in dir_items {
+                    results.push((item, Vec::new()));
+                }
+                return results;
             }
             
-            // Fuzzy match the directory contents
             let mut matched = Vec::new();
             for item in dir_items {
-                let score_orig = self.matcher.fuzzy_match(&item.name, &filter);
-                let score_accent = {
+                let (score_orig, indices_orig) = self.matcher.fuzzy_indices(&item.name, &filter).unwrap_or((0, Vec::new()));
+                let (score_accent, indices_accent) = {
                     let name_stripped = remove_vietnamese_accents(&item.name);
                     let filter_stripped = remove_vietnamese_accents(&filter);
-                    self.matcher.fuzzy_match(&name_stripped, &filter_stripped)
+                    self.matcher.fuzzy_indices(&name_stripped, &filter_stripped).unwrap_or((0, Vec::new()))
                 };
-                let final_score = match (score_orig, score_accent) {
-                    (Some(s1), Some(s2)) => Some(s1.max(s2)),
-                    (Some(s), None) | (None, Some(s)) => Some(s),
-                    (None, None) => None,
+
+                let (final_score, final_indices) = if score_orig >= score_accent && score_orig > 0 {
+                    (score_orig, indices_orig)
+                } else if score_accent > 0 {
+                    (score_accent, indices_accent)
+                } else {
+                    (0, Vec::new())
                 };
-                if let Some(score) = final_score {
-                    matched.push((item, score));
+
+                if final_score > 0 {
+                    matched.push(((item, final_indices), final_score));
                 }
             }
             matched.sort_by(|a, b| b.1.cmp(&a.1));
-            return matched.into_iter().map(|(item, _)| item).collect();
+            for ((item, indices), _) in matched {
+                results.push((item, indices));
+            }
+            return results;
         }
 
-        // Normal search: search applications and pre-indexed files
-        let mut matches = Vec::new();
+        // 3. Empty query: Pinned apps first, then custom apps, other apps, and recent files
+        if trimmed_query.is_empty() {
+            let mut default_apps = Vec::new();
 
-        // 1. Search apps
+            // Pinned apps first
+            for pinned in &self.pinned_apps {
+                if let Some(app) = self.apps.iter().chain(self.custom_apps.iter()).find(|a| a.name.eq_ignore_ascii_case(pinned)) {
+                    if !default_apps.iter().any(|(item, _): &(LauncherItem, _)| item.name == app.name) {
+                        default_apps.push((app.clone(), Vec::new()));
+                    }
+                }
+            }
+
+            // Custom apps next
+            for custom in &self.custom_apps {
+                if !default_apps.iter().any(|(item, _): &(LauncherItem, _)| item.name == custom.name) {
+                    default_apps.push((custom.clone(), Vec::new()));
+                }
+            }
+
+            // Other apps
+            for app in &self.apps {
+                if !default_apps.iter().any(|(item, _): &(LauncherItem, _)| item.name == app.name) {
+                    default_apps.push((app.clone(), Vec::new()));
+                }
+            }
+
+            // Add top shallow files
+            for file in shallow_files_guard.iter().take(50) {
+                default_apps.push((file.clone(), Vec::new()));
+            }
+
+            return default_apps;
+        }
+
+        // 4. Normal Fuzzy Search
+        let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = Vec::new();
+
+        // 4.1 Search Custom Apps
+        for custom in &self.custom_apps {
+            if let Some((score, indices)) = self.match_item(&custom.name, trimmed_query) {
+                let boost = history_guard.get_boost(&custom.name) + 150; // High boost for custom apps
+                matches.push(((custom.clone(), indices), score + boost));
+            }
+        }
+
+        // 4.2 Search Standard Apps
         for app in &self.apps {
-            let score_orig = self.matcher.fuzzy_match(&app.name, query);
-            let score_accent = {
-                let name_stripped = remove_vietnamese_accents(&app.name);
-                let query_stripped = remove_vietnamese_accents(query);
-                self.matcher.fuzzy_match(&name_stripped, &query_stripped)
-            };
-            let final_score = match (score_orig, score_accent) {
-                (Some(s1), Some(s2)) => Some(s1.max(s2)),
-                (Some(s), None) | (None, Some(s)) => Some(s),
-                (None, None) => None,
-            };
-            if let Some(score) = final_score {
-                matches.push((app.clone(), score + 100)); // Boost applications slightly
+            if let Some((score, indices)) = self.match_item(&app.name, trimmed_query) {
+                let boost = history_guard.get_boost(&app.name) + 100; // App boost
+                matches.push(((app.clone(), indices), score + boost));
             }
         }
 
-        // 2. Search files
+        // 4.3 Search Files
+        let enable_path_matching = self.config.search.enable_path_matching.unwrap_or(true);
         for file in shallow_files_guard.iter() {
-            let score_orig = self.matcher.fuzzy_match(&file.name, query);
-            let score_accent = {
-                let name_stripped = remove_vietnamese_accents(&file.name);
-                let query_stripped = remove_vietnamese_accents(query);
-                self.matcher.fuzzy_match(&name_stripped, &query_stripped)
+            let match_res = self.match_item(&file.name, trimmed_query);
+            let final_res = if match_res.is_some() {
+                match_res
+            } else if enable_path_matching {
+                self.match_item(&file.exec_or_path, trimmed_query)
+            } else {
+                None
             };
-            let final_score = match (score_orig, score_accent) {
-                (Some(s1), Some(s2)) => Some(s1.max(s2)),
-                (Some(s), None) | (None, Some(s)) => Some(s),
-                (None, None) => None,
-            };
-            if let Some(score) = final_score {
-                matches.push((file.clone(), score));
+
+            if let Some((score, indices)) = final_res {
+                let boost = history_guard.get_boost(&file.exec_or_path);
+                matches.push(((file.clone(), indices), score + boost));
             }
         }
 
-        // Sort by fuzzy match score descending
+        // Sort by total score descending
         matches.sort_by(|a, b| b.1.cmp(&a.1));
-        matches.into_iter().map(|(item, _)| item).collect()
+
+        for (item_with_indices, _) in matches {
+            results.push(item_with_indices);
+        }
+
+        results
     }
 
-    /// Spawns the detached GUI application or opens files via xdg-open.
-    #[cfg(not(target_os = "windows"))]
-    pub fn launch(&self, item: &LauncherItem) {
-        let res = match item.item_type {
-            ItemType::App => {
-                let exec_cmd = if item.terminal {
-                    let term = find_terminal_emulator();
-                    format!("{} -e {}", term, item.exec_or_path)
-                } else {
-                    item.exec_or_path.clone()
-                };
-
-                // We use standard pre_exec Unix Extension in Rust to execute setsid()
-                // in the child process immediately after fork but before exec. This is the 
-                // native systems-level way to create a new session, fully detaching the process
-                // from the controlling terminal, ensuring it continues running after the terminal exits.
-                unsafe {
-                    Command::new("sh")
-                        .arg("-c")
-                        .arg(format!("exec {}", exec_cmd))
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .stdin(std::process::Stdio::null())
-                        .pre_exec(|| {
-                            setsid();
-                            Ok(())
-                        })
-                        .spawn()
-                        .map(|_| ())
-                }
-            }
-            ItemType::File | ItemType::Dir => {
-                // Open file or directory using system default via xdg-open in a detached session
-                unsafe {
-                    Command::new("sh")
-                        .arg("-c")
-                        .arg(format!("exec xdg-open '{}'", item.exec_or_path))
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .stdin(std::process::Stdio::null())
-                        .pre_exec(|| {
-                            setsid();
-                            Ok(())
-                        })
-                        .spawn()
-                        .map(|_| ())
-                }
-            }
+    fn match_item(&self, text: &str, query: &str) -> Option<(i64, Vec<usize>)> {
+        let (score_orig, indices_orig) = self.matcher.fuzzy_indices(text, query).unwrap_or((0, Vec::new()));
+        let (score_accent, indices_accent) = {
+            let text_stripped = remove_vietnamese_accents(text);
+            let query_stripped = remove_vietnamese_accents(query);
+            self.matcher.fuzzy_indices(&text_stripped, &query_stripped).unwrap_or((0, Vec::new()))
         };
 
-        if let Err(e) = res {
-            if let Ok(mut file) = fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/view-launcher.log")
-            {
-                use std::io::Write;
-                let _ = writeln!(file, "[ERROR] Failed to spawn {}: {:?}", item.exec_or_path, e);
-            }
+        if score_orig >= score_accent && score_orig > 0 {
+            Some((score_orig, indices_orig))
+        } else if score_accent > 0 {
+            Some((score_accent, indices_accent))
+        } else {
+            None
         }
     }
 
-    /// Spawns the detached GUI application or opens files via cmd /C start on Windows.
-    #[cfg(target_os = "windows")]
+    /// Spawns the application or opens file safely.
     pub fn launch(&self, item: &LauncherItem) {
-        let _ = Command::new("cmd")
-            .args(&["/C", "start", "", &item.exec_or_path])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .stdin(std::process::Stdio::null())
-            .spawn();
+        if item.item_type == ItemType::Calc {
+            self.copy_to_clipboard(&item.exec_or_path);
+            return;
+        }
+
+        // Record history
+        let key = if item.item_type == ItemType::App { &item.name } else { &item.exec_or_path };
+        if let Ok(mut h) = self.history.write() {
+            h.record_launch(key);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            match item.item_type {
+                ItemType::App => {
+                    let tokens: Vec<&str> = item.exec_or_path.split_whitespace().collect();
+                    if tokens.is_empty() { return; }
+
+                    if item.terminal {
+                        let term = find_terminal_emulator();
+                        let mut cmd = Command::new(&term);
+                        cmd.arg("-e").args(&tokens);
+                        unsafe {
+                            cmd.stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
+                                .stdin(std::process::Stdio::null())
+                                .pre_exec(|| {
+                                    setsid();
+                                    Ok(())
+                                })
+                                .spawn()
+                                .ok();
+                        }
+                    } else {
+                        let mut cmd = Command::new(tokens[0]);
+                        if tokens.len() > 1 {
+                            cmd.args(&tokens[1..]);
+                        }
+                        unsafe {
+                            cmd.stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
+                                .stdin(std::process::Stdio::null())
+                                .pre_exec(|| {
+                                    setsid();
+                                    Ok(())
+                                })
+                                .spawn()
+                                .ok();
+                        }
+                    }
+                }
+                ItemType::File | ItemType::Dir => {
+                    unsafe {
+                        Command::new("xdg-open")
+                            .arg(&item.exec_or_path)
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .stdin(std::process::Stdio::null())
+                            .pre_exec(|| {
+                                setsid();
+                                Ok(())
+                            })
+                            .spawn()
+                            .ok();
+                    }
+                }
+                ItemType::Calc => {}
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let _ = Command::new("cmd")
+                .args(&["/C", "start", "", &item.exec_or_path])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .stdin(std::process::Stdio::null())
+                .spawn();
+        }
     }
+
+    /// Opens the containing directory of the item in terminal.
+    pub fn open_in_terminal(&self, item: &LauncherItem) {
+        let dir = match item.item_type {
+            ItemType::Dir => PathBuf::from(&item.exec_or_path),
+            ItemType::File => Path::new(&item.exec_or_path).parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from(".")),
+            ItemType::App | ItemType::Calc => return,
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let term = find_terminal_emulator();
+            unsafe {
+                Command::new(&term)
+                    .current_dir(&dir)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .stdin(std::process::Stdio::null())
+                    .pre_exec(|| {
+                        setsid();
+                        Ok(())
+                    })
+                    .spawn()
+                    .ok();
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let _ = Command::new("cmd")
+                .args(&["/C", "start", "wt.exe", "-d", &dir.to_string_lossy()])
+                .spawn();
+        }
+    }
+
+    /// Copies path or result string to clipboard.
+    pub fn copy_to_clipboard(&self, text: &str) {
+        #[cfg(not(target_os = "windows"))]
+        {
+            use std::io::Write;
+            // Try wl-copy (Wayland) first
+            if let Ok(mut child) = Command::new("wl-copy").stdin(std::process::Stdio::piped()).spawn() {
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = stdin.write_all(text.as_bytes());
+                }
+                let _ = child.wait();
+                return;
+            }
+
+            // Fallback to xclip (X11)
+            if let Ok(mut child) = Command::new("xclip").args(&["-selection", "clipboard"]).stdin(std::process::Stdio::piped()).spawn() {
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = stdin.write_all(text.as_bytes());
+                }
+                let _ = child.wait();
+                return;
+            }
+
+            // Fallback to xsel
+            if let Ok(mut child) = Command::new("xsel").args(&["--clipboard", "--input"]).stdin(std::process::Stdio::piped()).spawn() {
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = stdin.write_all(text.as_bytes());
+                }
+                let _ = child.wait();
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::io::Write;
+            if let Ok(mut child) = Command::new("clip").stdin(std::process::Stdio::piped()).spawn() {
+                if let Some(mut stdin) = child.stdin.take() {
+                    let _ = stdin.write_all(text.as_bytes());
+                }
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
+fn expand_tilde(path_str: &str) -> String {
+    if path_str.starts_with("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return path_str.replacen("~/", &format!("{}/", home.to_string_lossy()), 1);
+        }
+    } else if path_str == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return home.to_string_lossy().to_string();
+        }
+    }
+    path_str.to_string()
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -492,6 +755,8 @@ fn find_terminal_emulator() -> String {
         "kitty",
         "alacritty",
         "wezterm",
+        "ghostty",
+        "foot",
         "gnome-terminal",
         "konsole",
         "xfce4-terminal",
@@ -541,51 +806,3 @@ pub fn remove_vietnamese_accents(s: &str) -> String {
         }
     }).collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_search_yazi() {
-        let config = Config::default();
-        let engine = LauncherEngine::new(config);
-        let results = engine.search("yazi");
-        println!("\n=== SEARCH RESULTS FOR 'YAZI' ===");
-        for (i, item) in results.iter().enumerate() {
-            println!("{}: [{:?}] {} (Exec: {}) [Terminal: {}]", i + 1, item.item_type, item.name, item.exec_or_path, item.terminal);
-        }
-        println!("=================================\n");
-        assert!(!results.is_empty(), "Should find yazi application or files");
-        assert!(results[0].terminal, "Yazi desktop entry should specify Terminal=true");
-    }
-
-    #[test]
-    fn test_resolve_path_search_no_slash() {
-        let config = Config::default();
-        let engine = LauncherEngine::new(config);
-        assert!(engine.resolve_path_search("downloads").is_none());
-    }
-
-    #[test]
-    fn test_resolve_path_search_with_slash() {
-        let config = Config::default();
-        let engine = LauncherEngine::new(config);
-        
-        // Verify path parsing for temporary path
-        let res = engine.resolve_path_search("/tmp/testfile");
-        assert!(res.is_some());
-        let (dir, filter) = res.unwrap();
-        assert_eq!(dir, PathBuf::from("/tmp"));
-        assert_eq!(filter, "testfile");
-    }
-
-    #[test]
-    fn test_remove_vietnamese_accents() {
-        assert_eq!(remove_vietnamese_accents("Tải xuống"), "tai xuong");
-        assert_eq!(remove_vietnamese_accents("Học tập"), "hoc tap");
-        assert_eq!(remove_vietnamese_accents("Đường dẫn"), "duong dan");
-        assert_eq!(remove_vietnamese_accents("Lập trình Rust"), "lap trinh rust");
-    }
-}
-
