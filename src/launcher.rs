@@ -14,7 +14,7 @@ use crate::calc;
 use std::os::unix::process::CommandExt;
 
 #[cfg(unix)]
-extern "C" {
+unsafe extern "C" {
     fn setsid() -> i32;
 }
 
