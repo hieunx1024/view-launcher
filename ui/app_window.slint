@@ -1,5 +1,3 @@
-import { ListView } from "std-widgets.slint";
-
 export struct LauncherItemData {
     name: string,
     category: string,
@@ -30,7 +28,7 @@ export component AppWindow inherits Window {
     in-out property <bool> cfg_show_icons: true;
     in-out property <bool> cfg_show_status_bar: true;
     in-out property <bool> cfg_enable_path_matching: true;
-    in-out property <int> cfg_max_results: 20;
+    in-out property <int> cfg_max_results: 10;
     in-out property <int> cfg_max_depth: 2;
     in-out property <string> settings_status: "";
 
@@ -48,6 +46,10 @@ export component AppWindow inherits Window {
     callback start_window_drag();
 
     forward-focus: search_input;
+
+    init => {
+        search_input.focus();
+    }
 
     // Main Card Container with rounded corners & Tokyo Night dark palette
     main_card := Rectangle {
@@ -68,7 +70,7 @@ export component AppWindow inherits Window {
             padding-right: 14px;
             padding-top: 12px;
             padding-bottom: 10px;
-            spacing: 10px;
+            spacing: 8px;
 
             // 1. Top Header Bar (Native Window Drag Area)
             header_bar := Rectangle {
@@ -147,6 +149,12 @@ export component AppWindow inherits Window {
                 border-width: 1px;
                 border-color: root.is_file_mode ? #2ac3de : #414868;
 
+                TouchArea {
+                    clicked => {
+                        search_input.focus();
+                    }
+                }
+
                 HorizontalLayout {
                     padding-left: 12px;
                     padding-right: 12px;
@@ -175,7 +183,8 @@ export component AppWindow inherits Window {
                         }
 
                         search_input := TextInput {
-                            text <=> root.search_text;
+                            text: root.search_text;
+                            single-line: true;
                             font-size: 15px;
                             color: #f0f6fc;
                             selection-background-color: #3b4261;
@@ -183,6 +192,7 @@ export component AppWindow inherits Window {
                             vertical-alignment: center;
 
                             edited => {
+                                root.search_text = self.text;
                                 root.search_text_changed(self.text);
                             }
 
@@ -226,7 +236,7 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // 3. Item Results List
+            // 3. Item Results Direct Layout (High-Performance, Zero Focus Shift)
             list_container := Rectangle {
                 vertical-stretch: 1;
                 clip: true;
@@ -251,10 +261,13 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                ListView {
+                VerticalLayout {
                     visible: root.has_results;
+                    alignment: start;
+                    spacing: 2px;
+
                     for item[index] in root.items : item_row := Rectangle {
-                        height: 42px;
+                        height: 38px;
                         background: (index == root.selected_index) ? #283457 : (item_touch.has-hover ? #1f2335 : transparent);
                         border-radius: 6px;
 
