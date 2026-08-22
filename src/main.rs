@@ -105,16 +105,18 @@ fn populate_items(
     let trimmed = query.trim();
     let is_file_mode = trimmed.starts_with("@f") || trimmed.starts_with("@file");
     let results = engine.search(query);
+    let count = results.len();
 
     ui.set_is_file_mode(is_file_mode);
+    ui.set_has_results(count > 0);
     if is_file_mode {
         ui.set_mode_icon("󰉋".into());
         ui.set_mode_title("FILE SEARCH".into());
-        ui.set_status_item_count(format!("{} files", results.len()).into());
+        ui.set_status_item_count(format!("{} files", count).into());
     } else {
         ui.set_mode_icon("󰀻".into());
         ui.set_mode_title("VIEW LAUNCHER".into());
-        ui.set_status_item_count(format!("{} apps", results.len()).into());
+        ui.set_status_item_count(format!("{} apps", count).into());
     }
 
     let mut current_items = Vec::new();
@@ -189,6 +191,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *lock = items;
                 }
                 ui.set_selected_index(0);
+            }
+        });
+    }
+
+    // 5.1 Connect Move Up
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_move_up(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let cur = ui.get_selected_index();
+                if cur > 0 {
+                    ui.set_selected_index(cur - 1);
+                }
+            }
+        });
+    }
+
+    // 5.2 Connect Move Down
+    {
+        let ui_weak = ui.as_weak();
+        let current_results = current_results.clone();
+        ui.on_move_down(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let total = if let Ok(lock) = current_results.read() {
+                    lock.len() as i32
+                } else {
+                    0
+                };
+                let cur = ui.get_selected_index();
+                if cur + 1 < total {
+                    ui.set_selected_index(cur + 1);
+                }
             }
         });
     }

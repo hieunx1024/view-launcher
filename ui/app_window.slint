@@ -19,12 +19,15 @@ export component AppWindow inherits Window {
     in-out property <string> search_text: "";
     in-out property <int> selected_index: 0;
     in property <[LauncherItemData]> items: [];
+    in property <bool> has_results: true;
     in property <string> mode_title: "VIEW LAUNCHER";
     in property <string> mode_icon: "󰀻";
     in property <bool> is_file_mode: false;
     in property <string> status_item_count: "0 items";
 
     callback search_text_changed(string);
+    callback move_up();
+    callback move_down();
     callback item_activated(int);
     callback open_in_terminal(int);
     callback copy_path(int);
@@ -127,16 +130,12 @@ export component AppWindow inherits Window {
                                 root.item_activated(root.selected_index);
                                 return accept;
                             }
-                            if (event.text == Key.DownArrow) {
-                                if (root.selected_index + 1 < root.items.length) {
-                                    root.selected_index += 1;
-                                }
+                            if (event.text == Key.Down) {
+                                root.move_down();
                                 return accept;
                             }
-                            if (event.text == Key.UpArrow) {
-                                if (root.selected_index > 0) {
-                                    root.selected_index -= 1;
-                                }
+                            if (event.text == Key.Up) {
+                                root.move_up();
                                 return accept;
                             }
                             if (event.modifiers.control && event.text == ",") {
@@ -162,7 +161,7 @@ export component AppWindow inherits Window {
                 vertical-stretch: 1;
                 clip: true;
 
-                if root.items.length == 0 : Rectangle {
+                if !root.has_results : Rectangle {
                     VerticalLayout {
                         alignment: center;
                         spacing: 8px;
@@ -181,7 +180,7 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if root.items.length > 0 : ListView {
+                if root.has_results : ListView {
                     for item[index] in root.items : item_row := Rectangle {
                         height: 42px;
                         background: (index == root.selected_index) ? #283457 : (item_touch.has-hover ? #1f2335 : transparent);
