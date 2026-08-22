@@ -19,7 +19,7 @@ name = "view-launcher"
 path = "src/main.rs"
 
 [dependencies]
-slint = { version = "=1.9.2", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2"] }
+slint = { version = "=1.9.2", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "renderer-software", "compat-1-2"] }
 i-slint-backend-winit = "=1.9.2"
 fuzzy-matcher = "0.3.7"
 walkdir = "2.5"
