@@ -198,9 +198,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_cfg_max_results(config.search.max_results as i32);
     ui.set_cfg_max_depth(config.search.max_depth as i32);
 
-    // 4. Initial Population
     let engine = Arc::new(LauncherEngine::new(config));
     let icon_resolver = Arc::new(IconResolver::new());
+
+    // Set UI action icons
+    ui.set_settings_icon(icon_resolver.get_gear_icon());
+    ui.set_nav_icon(icon_resolver.get_nav_icon());
+    ui.set_enter_icon(icon_resolver.get_enter_icon());
+
+    // Window properties
+    ui.window().with_winit_window(|winit_window| {
+        winit_window.set_transparent(true);
+        winit_window.set_decorations(false);
+    });
+
+    // 4. Initial Population
     let current_results = Arc::new(std::sync::RwLock::new(populate_items(
         &ui,
         &engine,
