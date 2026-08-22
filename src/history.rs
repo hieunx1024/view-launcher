@@ -10,29 +10,35 @@ pub struct HistoryEntry {
     pub last_used: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct HistoryData {
+    #[serde(default)]
+    pub entries: HashMap<String, HistoryEntry>,
+}
+
 #[derive(Debug)]
 pub struct HistoryManager {
-    entries: HashMap<String, HistoryEntry>,
+    data: HistoryData,
     cache_path: Option<PathBuf>,
 }
 
 impl HistoryManager {
     pub fn load() -> Self {
         let cache_path = Self::get_cache_path();
-        let mut entries = HashMap::new();
+        let mut data = HistoryData::default();
 
         if let Some(ref path) = cache_path {
             if path.exists() {
-                if let Ok(data) = fs::read_to_string(path) {
-                    if let Ok(parsed) = serde_json::from_str::<HashMap<String, HistoryEntry>>(&data) {
-                        entries = parsed;
+                if let Ok(content) = fs::read_to_string(path) {
+                    if let Ok(parsed) = toml::from_str::<HistoryData>(&content) {
+                        data = parsed;
                     }
                 }
             }
         }
 
         Self {
-            entries,
+            data,
             cache_path,
         }
     }
@@ -42,7 +48,7 @@ impl HistoryManager {
         {
             dirs::data_local_dir().map(|mut p| {
                 p.push("view-launcher");
-                p.push("history.json");
+                p.push("history.toml");
                 p
             })
         }
@@ -50,7 +56,7 @@ impl HistoryManager {
         {
             dirs::cache_dir().map(|mut p| {
                 p.push("view-launcher");
-                p.push("history.json");
+                p.push("history.toml");
                 p
             })
         }
@@ -62,7 +68,7 @@ impl HistoryManager {
             .unwrap_or_default()
             .as_secs();
 
-        let entry = self.entries.entry(key.to_string()).or_insert(HistoryEntry {
+        let entry = self.data.entries.entry(key.to_string()).or_insert(HistoryEntry {
             count: 0,
             last_used: now,
         });
@@ -74,7 +80,7 @@ impl HistoryManager {
     }
 
     pub fn get_boost(&self, key: &str) -> i64 {
-        if let Some(entry) = self.entries.get(key) {
+        if let Some(entry) = self.data.entries.get(key) {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -107,8 +113,8 @@ impl HistoryManager {
             if let Some(parent) = path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            if let Ok(json) = serde_json::to_string_pretty(&self.entries) {
-                let _ = fs::write(path, json);
+            if let Ok(content) = toml::to_string_pretty(&self.data) {
+                let _ = fs::write(path, content);
             }
         }
     }

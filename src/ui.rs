@@ -5,7 +5,7 @@ use ratatui::{
     style::{Style, Modifier, Color},
     text::{Line, Span},
 };
-use crate::launcher::{LauncherItem, ItemType};
+use crate::launcher::LauncherItem;
 use crate::config::{ThemeConfig, parse_color};
 use crate::icons;
 

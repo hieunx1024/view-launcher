@@ -824,7 +824,13 @@ mod tests {
         let config = Config::default();
         let engine = LauncherEngine::new(config);
         assert!(engine.resolve_path_search("downloads").is_none());
-        assert!(engine.resolve_path_search("/tmp/testfile").is_some());
+        if let Some(home) = dirs::home_dir() {
+            let mut home_str = home.to_string_lossy().to_string();
+            if !home_str.ends_with('/') && !home_str.ends_with('\\') {
+                home_str.push('/');
+            }
+            assert!(engine.resolve_path_search(&home_str).is_some());
+        }
     }
 }
 
