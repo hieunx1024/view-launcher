@@ -206,7 +206,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_nav_icon(icon_resolver.get_nav_icon());
     ui.set_enter_icon(icon_resolver.get_enter_icon());
     ui.set_search_icon(icon_resolver.get_search_icon());
-    ui.set_bulb_icon(icon_resolver.get_bulb_icon());
 
     // Window properties & Icon
     let app_icon_opt = image::load_from_memory(include_bytes!("../assets/view-launcher.png"))

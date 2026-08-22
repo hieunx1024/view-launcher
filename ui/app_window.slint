@@ -28,7 +28,6 @@ export component AppWindow inherits Window {
     in property <image> nav_icon;
     in property <image> enter_icon;
     in property <image> search_icon;
-    in property <image> bulb_icon;
 
     // In-App Settings State
     in-out property <bool> in_settings_mode: false;
@@ -84,8 +83,8 @@ export component AppWindow inherits Window {
             padding-left: 18px;
             padding-right: 18px;
             padding-top: 10px;
-            padding-bottom: 14px;
-            spacing: 10px;
+            padding-bottom: 12px;
+            spacing: 8px;
 
             // 0. DEDICATED VIRTUAL TITLEBAR & DRAG REGION (28px)
             title_bar := Rectangle {
@@ -167,11 +166,13 @@ export component AppWindow inherits Window {
                     padding-left: 16px;
                     padding-right: 14px;
                     spacing: 12px;
+                    alignment: center;
 
-                    // 1.1 Fixed Vector Search Icon (Crisp SVG)
+                    // 1.1 Fixed Vector Search Icon (Crisp SVG & Centered)
                     HorizontalLayout {
                         alignment: center;
                         width: 20px;
+                        height: 20px;
                         Image {
                             source: root.search_icon;
                             width: 18px;
@@ -185,10 +186,13 @@ export component AppWindow inherits Window {
                     // 1.2 Text Input & Shortened Placeholder
                     Rectangle {
                         horizontal-stretch: 1;
+                        height: 32px;
 
                         Text {
                             x: 0px;
+                            y: 0px;
                             width: 100%;
+                            height: 100%;
                             text: root.is_file_mode ? "Search files & folders (e.g. notes.pdf, ~/Projects)..." : "Search apps or type @ for files...";
                             color: #565f89;
                             font-size: 14px;
@@ -200,7 +204,9 @@ export component AppWindow inherits Window {
 
                         search_input := TextInput {
                             x: 0px;
+                            y: 0px;
                             width: 100%;
+                            height: 100%;
                             text: root.search_text;
                             single-line: true;
                             font-size: 15px;
@@ -317,25 +323,11 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // 1.4 Subtle Quick Tip with Vector Bulb Icon (Beneath Search Box)
+            // 1.4 Subtle Clean Tip (Beneath Search Box - No Bulb Icon)
             if root.search_text == "" : HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                spacing: 6px;
+                padding-left: 6px;
+                padding-right: 6px;
                 alignment: start;
-
-                HorizontalLayout {
-                    alignment: center;
-                    width: 14px;
-                    Image {
-                        source: root.bulb_icon;
-                        width: 13px;
-                        height: 13px;
-                        image-fit: contain;
-                        vertical-alignment: center;
-                        horizontal-alignment: center;
-                    }
-                }
 
                 Text {
                     text: "Tip: Type math (500*12), hex (0xFF), or @f for file search (Tab to enter folders)";
@@ -531,7 +523,7 @@ export component AppWindow inherits Window {
 
             // 3. KEYBOARD AFFORDANCE FOOTER BAR (Crisp Vectors & Balanced Badges)
             if root.cfg_show_status_bar : footer := Rectangle {
-                height: 28px;
+                height: 26px;
 
                 HorizontalLayout {
                     alignment: space-between;
@@ -549,8 +541,8 @@ export component AppWindow inherits Window {
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 20px;
-                                width: 24px;
+                                height: 18px;
+                                width: 22px;
                                 border-width: 1px;
                                 border-color: #323854;
 
@@ -558,8 +550,8 @@ export component AppWindow inherits Window {
                                     alignment: center;
                                     Image {
                                         source: root.nav_icon;
-                                        width: 12px;
-                                        height: 12px;
+                                        width: 11px;
+                                        height: 11px;
                                         image-fit: contain;
                                         vertical-alignment: center;
                                         horizontal-alignment: center;
@@ -577,15 +569,15 @@ export component AppWindow inherits Window {
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 20px;
+                                height: 18px;
                                 border-width: 1px;
                                 border-color: #323854;
 
                                 HorizontalLayout {
-                                    padding-left: 6px;
-                                    padding-right: 6px;
+                                    padding-left: 5px;
+                                    padding-right: 5px;
                                     alignment: center;
-                                    Text { text: "Tab"; color: #2ac3de; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                    Text { text: "Tab"; color: #2ac3de; font-weight: 800; font-size: 10.5px; vertical-alignment: center; }
                                 }
                             }
                             Text { text: "Enter Folder"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
@@ -599,8 +591,8 @@ export component AppWindow inherits Window {
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 20px;
-                                width: 24px;
+                                height: 18px;
+                                width: 22px;
                                 border-width: 1px;
                                 border-color: #323854;
 
@@ -608,8 +600,8 @@ export component AppWindow inherits Window {
                                     alignment: center;
                                     Image {
                                         source: root.enter_icon;
-                                        width: 12px;
-                                        height: 12px;
+                                        width: 11px;
+                                        height: 11px;
                                         image-fit: contain;
                                         vertical-alignment: center;
                                         horizontal-alignment: center;
@@ -627,15 +619,15 @@ export component AppWindow inherits Window {
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 20px;
+                                height: 18px;
                                 border-width: 1px;
                                 border-color: #323854;
 
                                 HorizontalLayout {
-                                    padding-left: 6px;
-                                    padding-right: 6px;
+                                    padding-left: 5px;
+                                    padding-right: 5px;
                                     alignment: center;
-                                    Text { text: "Esc"; color: #f7768e; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                    Text { text: "Esc"; color: #f7768e; font-weight: 800; font-size: 10.5px; vertical-alignment: center; }
                                 }
                             }
                             Text { text: "Close"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
@@ -649,15 +641,15 @@ export component AppWindow inherits Window {
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 20px;
+                                height: 18px;
                                 border-width: 1px;
                                 border-color: #323854;
 
                                 HorizontalLayout {
-                                    padding-left: 6px;
-                                    padding-right: 6px;
+                                    padding-left: 5px;
+                                    padding-right: 5px;
                                     alignment: center;
-                                    Text { text: "Ctrl+,"; color: #7aa2f7; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                    Text { text: "Ctrl+,"; color: #7aa2f7; font-weight: 800; font-size: 10.5px; vertical-alignment: center; }
                                 }
                             }
                             Text { text: "Settings"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
