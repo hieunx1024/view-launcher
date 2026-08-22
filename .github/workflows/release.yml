@@ -119,3 +119,11 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+          body: |
+            A minimalist, high-performance application and file launcher for Linux and Windows (<1ms).
+
+            ### Assets
+            - `view-launcher-setup.exe`: Windows installer with desktop shortcuts and background hotkey
+            - `view-launcher_0.2.0-1_amd64.deb`: Debian/Ubuntu package with desktop icon
+            - `view-launcher-windows-x86_64.zip`: Windows portable archive
+            - `view-launcher-linux-x86_64.tar.gz`: Linux portable archive
