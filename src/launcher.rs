@@ -934,6 +934,35 @@ mod tests {
         let results = engine.search("@f");
         assert!(results.iter().all(|(item, _)| item.item_type == ItemType::File || item.item_type == ItemType::Dir));
     }
+
+    #[test]
+    fn test_settings_save_and_load() {
+        let mut config = Config::default();
+        config.theme.show_icons = Some(false);
+        config.search.max_results = 25;
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let deserialized: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.theme.show_icons, Some(false));
+        assert_eq!(deserialized.search.max_results, 25);
+    }
+
+    #[test]
+    fn test_search_and_icon_performance() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        let resolver = crate::icon_resolver::IconResolver::new();
+        
+        let start = std::time::Instant::now();
+        let results = engine.search("int");
+        let elapsed_search = start.elapsed();
+        assert!(elapsed_search.as_millis() < 10, "Search took too long: {:?}", elapsed_search);
+
+        for (item, _) in results.into_iter().take(20) {
+            let _ = resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
+        }
+        let elapsed_total = start.elapsed();
+        assert!(elapsed_total.as_millis() < 50, "Total search + icon took too long: {:?}", elapsed_total);
+    }
 }
 
 

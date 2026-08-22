@@ -1,8 +1,8 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ThemeConfig {
     #[serde(default = "default_query_color")]
     pub query_color: String,
@@ -41,7 +41,7 @@ impl Default for ThemeConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SearchPathConfig {
     pub path: String,
     #[serde(default = "default_depth")]
@@ -53,7 +53,7 @@ pub struct SearchPathConfig {
 
 fn default_depth() -> usize { 2 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SearchConfig {
     #[serde(default = "default_max_results")]
     pub max_results: usize,
@@ -84,7 +84,7 @@ impl Default for SearchConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CustomAppConfig {
     pub name: String,
     pub exec: String,
@@ -95,7 +95,7 @@ pub struct CustomAppConfig {
     pub category: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct AppsConfig {
     #[serde(default)]
     pub pinned: Vec<String>,
@@ -107,7 +107,7 @@ pub struct AppsConfig {
     pub custom: Vec<CustomAppConfig>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     #[serde(default)]
     pub theme: ThemeConfig,
@@ -144,11 +144,30 @@ impl Config {
         
         if config_path.exists() {
             if let Ok(content) = fs::read_to_string(&config_path) {
-                if let Ok(parsed) = toml::from_str::<Config>(&content) {
+                if let Ok(parsed) = toml::from_str(&content) {
                     config = parsed;
                 }
             }
+        } else {
+            // Write default config to disk if it doesn't exist
+            if let Some(parent) = config_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(toml_str) = toml::to_string_pretty(&config) {
+                let _ = fs::write(&config_path, toml_str);
+            }
         }
+        
         config
+    }
+
+    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let config_path = Self::get_config_path();
+        if let Some(parent) = config_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let toml_str = toml::to_string_pretty(self)?;
+        fs::write(config_path, toml_str)?;
+        Ok(())
     }
 }

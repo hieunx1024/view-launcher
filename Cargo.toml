@@ -10,6 +10,14 @@ readme = "README.md"
 keywords = ["launcher", "slint", "gui", "wayland", "fuzzy-search"]
 categories = ["command-line-utilities", "gui"]
 
+[lib]
+name = "view_launcher"
+path = "src/lib.rs"
+
+[[bin]]
+name = "view-launcher"
+path = "src/main.rs"
+
 [dependencies]
 slint = { version = "=1.9.2", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2"] }
 i-slint-backend-winit = "=1.9.2"

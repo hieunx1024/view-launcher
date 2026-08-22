@@ -1,19 +1,13 @@
-slint::include_modules!();
-
-mod calc;
-mod config;
-mod history;
-mod icon_resolver;
-mod launcher;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use config::Config;
-use icon_resolver::IconResolver;
-use launcher::{LauncherEngine, LauncherItem, open_config_file};
+use slint::ComponentHandle;
+use view_launcher::config::Config;
+use view_launcher::icon_resolver::IconResolver;
+use view_launcher::launcher::{self, LauncherEngine, LauncherItem, open_config_file};
+use view_launcher::{AppWindow, LauncherItemData};
 use i_slint_backend_winit::WinitWindowAccessor;
 
 #[cfg(unix)]
@@ -171,6 +165,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. Load Config & Initialize Engine
     let config = Config::load();
+    ui.set_cfg_show_icons(config.theme.show_icons.unwrap_or(true));
+    ui.set_cfg_show_status_bar(config.theme.show_status_bar.unwrap_or(true));
+    ui.set_cfg_enable_path_matching(config.search.enable_path_matching.unwrap_or(true));
+    ui.set_cfg_max_results(config.search.max_results as i32);
+    ui.set_cfg_max_depth(config.search.max_depth as i32);
+
     let engine = Arc::new(LauncherEngine::new(config));
     let icon_resolver = Arc::new(IconResolver::new());
 
@@ -206,12 +206,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5.1 Connect Move Up
     {
         let ui_weak = ui.as_weak();
+        let current_results = current_results.clone();
         ui.on_move_up(move || {
             if let Some(ui) = ui_weak.upgrade() {
+                let total = if let Ok(lock) = current_results.read() {
+                    lock.len() as i32
+                } else {
+                    0
+                };
+                if total == 0 { return; }
                 let cur = ui.get_selected_index();
-                if cur > 0 {
-                    ui.set_selected_index(cur - 1);
-                }
+                let next = if cur <= 0 { total - 1 } else { cur - 1 };
+                ui.set_selected_index(next);
             }
         });
     }
@@ -227,10 +233,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     0
                 };
+                if total == 0 { return; }
                 let cur = ui.get_selected_index();
-                if cur + 1 < total {
-                    ui.set_selected_index(cur + 1);
-                }
+                let next = if cur + 1 >= total { 0 } else { cur + 1 };
+                ui.set_selected_index(next);
             }
         });
     }
@@ -308,8 +314,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // 9. Connect Open Config (Ctrl+,)
-    ui.on_open_config(move || {
+    // 9. Connect Open Settings View (Ctrl+,)
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_open_config(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_in_settings_mode(true);
+                ui.set_settings_status("".into());
+            }
+        });
+    }
+
+    // 9.1 Connect Close Settings View
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_close_settings(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_in_settings_mode(false);
+            }
+        });
+    }
+
+    // 9.2 Connect Save Settings
+    {
+        let ui_weak = ui.as_weak();
+        let engine = engine.clone();
+        let icon_resolver = icon_resolver.clone();
+        let current_results = current_results.clone();
+        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth| {
+            let mut cfg = Config::load();
+            cfg.theme.show_icons = Some(show_icons);
+            cfg.theme.show_status_bar = Some(show_status_bar);
+            cfg.search.enable_path_matching = Some(enable_path);
+            cfg.search.max_results = max_results as usize;
+            cfg.search.max_depth = max_depth as usize;
+            let _ = cfg.save();
+
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_settings_status("✔ Configuration saved to ~/.config/view-launcher/config.toml".into());
+                let items = populate_items(&ui, &engine, &icon_resolver, &ui.get_search_text());
+                if let Ok(mut lock) = current_results.write() {
+                    *lock = items;
+                }
+            }
+        });
+    }
+
+    // 9.3 Connect Open Raw config.toml in Editor
+    ui.on_open_raw_config(move || {
         open_config_file();
     });
 
