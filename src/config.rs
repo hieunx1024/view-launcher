@@ -2,6 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct GeneralConfig {
+    #[serde(default)]
+    pub autostart: bool,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ThemeConfig {
     #[serde(default = "default_query_color")]
@@ -107,24 +113,16 @@ pub struct AppsConfig {
     pub custom: Vec<CustomAppConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Config {
+    #[serde(default)]
+    pub general: GeneralConfig,
     #[serde(default)]
     pub theme: ThemeConfig,
     #[serde(default)]
     pub search: SearchConfig,
     #[serde(default)]
     pub apps: AppsConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            theme: ThemeConfig::default(),
-            search: SearchConfig::default(),
-            apps: AppsConfig::default(),
-        }
-    }
 }
 
 impl Config {
@@ -158,6 +156,7 @@ impl Config {
             }
         }
         
+        config.general.autostart = is_autostart_enabled();
         config
     }
 
@@ -168,6 +167,122 @@ impl Config {
         }
         let toml_str = toml::to_string_pretty(self)?;
         fs::write(config_path, toml_str)?;
+        let _ = set_autostart(self.general.autostart);
         Ok(())
+    }
+}
+
+/// Checks if autostart entry exists for current platform
+pub fn is_autostart_enabled() -> bool {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(mut path) = dirs::config_dir() {
+            path.push("autostart");
+            path.push("view-launcher.desktop");
+            return path.exists();
+        }
+        false
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(mut path) = dirs::config_dir() {
+            path.push("Microsoft");
+            path.push("Windows");
+            path.push("Start Menu");
+            path.push("Programs");
+            path.push("Startup");
+            path.push("view-launcher.bat");
+            return path.exists();
+        }
+        false
+    }
+}
+
+/// Sets or removes system autostart entry for current platform
+pub fn set_autostart(enabled: bool) -> Result<(), std::io::Error> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(mut path) = dirs::config_dir() {
+            path.push("autostart");
+            if enabled {
+                fs::create_dir_all(&path)?;
+                path.push("view-launcher.desktop");
+                let desktop_entry = "[Desktop Entry]\nType=Application\nName=View Launcher\nComment=Minimalist, high-performance GUI desktop app & file launcher in Rust\nExec=view-launcher\nIcon=view-launcher\nTerminal=false\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\n";
+                fs::write(&path, desktop_entry)?;
+            } else {
+                path.push("view-launcher.desktop");
+                if path.exists() {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(mut path) = dirs::config_dir() {
+            path.push("Microsoft");
+            path.push("Windows");
+            path.push("Start Menu");
+            path.push("Programs");
+            path.push("Startup");
+            path.push("view-launcher.bat");
+            if enabled {
+                if let Some(parent) = path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let bat_content = "@start \"\" \"view-launcher.exe\"\n";
+                fs::write(&path, bat_content)?;
+            } else if path.exists() {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Automatically registers global shortcut on supported desktop environments (GNOME, etc.)
+pub fn setup_global_shortcut() {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let is_gnome = std::env::var("XDG_CURRENT_DESKTOP")
+            .map(|d| d.to_lowercase().contains("gnome") || d.to_lowercase().contains("ubuntu"))
+            .unwrap_or(false);
+
+        if is_gnome {
+            let output = std::process::Command::new("gsettings")
+                .args(&["get", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings"])
+                .output();
+
+            if let Ok(out) = output {
+                let current = String::from_utf8_lossy(&out.stdout);
+                let path = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/view-launcher/";
+                if !current.contains("view-launcher") {
+                    let mut list: Vec<String> = current
+                        .trim()
+                        .trim_start_matches('@')
+                        .trim_start_matches("as")
+                        .trim()
+                        .trim_matches(|c| c == '[' || c == ']')
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty() && s != "''")
+                        .collect();
+                    list.push(format!("'{}'", path));
+                    let new_val = format!("[{}]", list.join(", "));
+                    let _ = std::process::Command::new("gsettings")
+                        .args(&["set", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings", &new_val])
+                        .status();
+                    let _ = std::process::Command::new("gsettings")
+                        .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "name", "View Launcher"])
+                        .status();
+                    let _ = std::process::Command::new("gsettings")
+                        .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "command", "view-launcher"])
+                        .status();
+                    let _ = std::process::Command::new("gsettings")
+                        .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "binding", "<Control><Alt>space"])
+                        .status();
+                }
+            }
+        }
     }
 }

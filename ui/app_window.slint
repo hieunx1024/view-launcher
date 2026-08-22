@@ -33,6 +33,7 @@ export component AppWindow inherits Window {
 
     // In-App Settings State
     in-out property <bool> in_settings_mode: false;
+    in-out property <bool> cfg_autostart: false;
     in-out property <bool> cfg_show_icons: true;
     in-out property <bool> cfg_show_status_bar: true;
     in-out property <bool> cfg_enable_path_matching: true;
@@ -48,7 +49,7 @@ export component AppWindow inherits Window {
     callback copy_path(int);
     callback open_config();
     callback close_settings();
-    callback save_settings(bool, bool, bool, int, int);
+    callback save_settings(bool, bool, bool, int, int, bool);
     callback open_raw_config();
     callback close_window();
     callback start_window_drag();
@@ -691,8 +692,8 @@ export component AppWindow inherits Window {
                     padding-left: 22px;
                     padding-right: 22px;
                     padding-top: 14px;
-                    padding-bottom: 18px;
-                    spacing: 12px;
+                    padding-bottom: 16px;
+                    spacing: 10px;
 
                     // 0. Settings Drag Bar (24px)
                     settings_title_bar := Rectangle {
@@ -770,7 +771,61 @@ export component AppWindow inherits Window {
                     // 1. Settings Content Area
                     VerticalLayout {
                         vertical-stretch: 1;
-                        spacing: 10px;
+                        spacing: 8px;
+
+                        // Group 0: System & Startup
+                        Text {
+                            text: "SYSTEM & STARTUP";
+                            color: #7aa2f7;
+                            font-size: 11px;
+                            font-weight: 800;
+                        }
+
+                        // Setting: Autostart with System
+                        Rectangle {
+                            height: 38px;
+                            background: #1b1e2e;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: #282c44;
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                alignment: space-between;
+                                Text {
+                                    text: "Start Automatically on System Boot";
+                                    color: #c0caf5;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                                HorizontalLayout {
+                                    alignment: end;
+                                    toggle_autostart := Rectangle {
+                                        width: 58px;
+                                        height: 26px;
+                                        border-radius: 13px;
+                                        background: root.cfg_autostart ? #7aa2f7 : #343b58;
+                                        TouchArea {
+                                            clicked => {
+                                                root.cfg_autostart = !root.cfg_autostart;
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: root.cfg_autostart ? "ON" : "OFF";
+                                                color: root.cfg_autostart ? #14151e : #a9b1d6;
+                                                font-size: 11px;
+                                                font-weight: 800;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         // Group 1: Appearance
                         Text {
@@ -782,14 +837,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Show App Icons
                         Rectangle {
-                            height: 42px;
+                            height: 38px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
+                                padding-left: 14px;
+                                padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Show Native Application Icons";
@@ -801,9 +856,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_icon := Rectangle {
-                                        width: 60px;
-                                        height: 28px;
-                                        border-radius: 14px;
+                                        width: 58px;
+                                        height: 26px;
+                                        border-radius: 13px;
                                         background: root.cfg_show_icons ? #7aa2f7 : #343b58;
                                         TouchArea {
                                             clicked => {
@@ -828,14 +883,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Show Status Bar
                         Rectangle {
-                            height: 42px;
+                            height: 38px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
+                                padding-left: 14px;
+                                padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Show Bottom Keyboard Shortcuts Bar";
@@ -847,9 +902,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_bar := Rectangle {
-                                        width: 60px;
-                                        height: 28px;
-                                        border-radius: 14px;
+                                        width: 58px;
+                                        height: 26px;
+                                        border-radius: 13px;
                                         background: root.cfg_show_status_bar ? #7aa2f7 : #343b58;
                                         TouchArea {
                                             clicked => {
@@ -882,14 +937,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Match Full Path
                         Rectangle {
-                            height: 42px;
+                            height: 38px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
+                                padding-left: 14px;
+                                padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Match Full File & Directory Paths";
@@ -901,9 +956,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_path := Rectangle {
-                                        width: 60px;
-                                        height: 28px;
-                                        border-radius: 14px;
+                                        width: 58px;
+                                        height: 26px;
+                                        border-radius: 13px;
                                         background: root.cfg_enable_path_matching ? #2ac3de : #343b58;
                                         TouchArea {
                                             clicked => {
@@ -928,14 +983,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Max Results Selector
                         Rectangle {
-                            height: 42px;
+                            height: 38px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
+                                padding-left: 14px;
+                                padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Max Visible Search Results";
@@ -950,7 +1005,7 @@ export component AppWindow inherits Window {
 
                                     for num in [5, 7, 9] : Rectangle {
                                         width: 36px;
-                                        height: 28px;
+                                        height: 26px;
                                         border-radius: 6px;
                                         background: (root.cfg_max_results == num) ? #7aa2f7 : #14151e;
                                         border-width: 1px;
@@ -967,8 +1022,8 @@ export component AppWindow inherits Window {
                                                 color: (root.cfg_max_results == num) ? #14151e : #c0caf5;
                                                 font-size: 12px;
                                                 font-weight: 800;
-                                                horizontal-alignment: center;
                                                 vertical-alignment: center;
+                                                horizontal-alignment: center;
                                             }
                                         }
                                     }
@@ -1033,7 +1088,8 @@ export component AppWindow inherits Window {
                                         root.cfg_show_status_bar,
                                         root.cfg_enable_path_matching,
                                         root.cfg_max_results,
-                                        root.cfg_max_depth
+                                        root.cfg_max_depth,
+                                        root.cfg_autostart
                                     );
                                 }
                             }

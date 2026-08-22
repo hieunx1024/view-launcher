@@ -207,8 +207,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // Setup global shortcut on desktop environments (GNOME, etc.)
+    view_launcher::config::setup_global_shortcut();
+
     // 3. Load Config & Initialize Engine
     let config = Config::load();
+    ui.set_cfg_autostart(view_launcher::config::is_autostart_enabled());
     ui.set_cfg_show_icons(config.theme.show_icons.unwrap_or(true));
     ui.set_cfg_show_status_bar(config.theme.show_status_bar.unwrap_or(true));
     ui.set_cfg_enable_path_matching(config.search.enable_path_matching.unwrap_or(true));
@@ -513,6 +517,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[DEBUG] on_open_config ENTER at {:?}", start);
             }
             if let Some(ui) = ui_weak.upgrade() {
+                ui.set_cfg_autostart(view_launcher::config::is_autostart_enabled());
                 ui.set_in_settings_mode(true);
                 ui.set_settings_status("".into());
                 ui.invoke_focus_settings();
@@ -547,8 +552,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let engine = engine.clone();
         let icon_resolver = icon_resolver.clone();
         let current_results = current_results.clone();
-        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth| {
+        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth, autostart| {
             let mut cfg = Config::load();
+            cfg.general.autostart = autostart;
             cfg.theme.show_icons = Some(show_icons);
             cfg.theme.show_status_bar = Some(show_status_bar);
             cfg.search.enable_path_matching = Some(enable_path);

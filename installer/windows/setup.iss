@@ -44,9 +44,9 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"; Tasks: desktopicon; HotKey: "Ctrl+Alt+Space"
 
-; Startup (with hotkey)
+; Startup
 Name: "{userstartup}\ViewLauncher"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"; Tasks: startupicon
 
 [Registry]
