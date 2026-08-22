@@ -32,23 +32,8 @@ fn get_socket_path() -> PathBuf {
     if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
         PathBuf::from(runtime_dir).join("view-launcher.sock")
     } else {
-        let uid = unsafe { libc_getuid() };
-        PathBuf::from(format!("/tmp/view-launcher-{}.sock", uid))
-    }
-}
-
-#[cfg(unix)]
-unsafe fn libc_getuid() -> u32 {
-    #[cfg(target_os = "linux")]
-    {
-        extern "C" {
-            fn getuid() -> u32;
-        }
-        getuid()
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        1000
+        let user = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+        PathBuf::from(format!("/tmp/view-launcher-{}.sock", user))
     }
 }
 

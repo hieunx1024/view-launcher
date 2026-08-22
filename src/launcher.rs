@@ -14,7 +14,7 @@ use crate::calc;
 use std::os::unix::process::CommandExt;
 
 #[cfg(unix)]
-unsafe extern "C" {
+extern "C" {
     fn setsid() -> i32;
 }
 
@@ -597,7 +597,7 @@ impl LauncherEngine {
                                 .stderr(std::process::Stdio::null())
                                 .stdin(std::process::Stdio::null())
                                 .pre_exec(|| {
-                                    setsid();
+                                    unsafe { setsid(); }
                                     Ok(())
                                 })
                                 .spawn()
@@ -613,7 +613,7 @@ impl LauncherEngine {
                                 .stderr(std::process::Stdio::null())
                                 .stdin(std::process::Stdio::null())
                                 .pre_exec(|| {
-                                    setsid();
+                                    unsafe { setsid(); }
                                     Ok(())
                                 })
                                 .spawn()
@@ -629,7 +629,7 @@ impl LauncherEngine {
                             .stderr(std::process::Stdio::null())
                             .stdin(std::process::Stdio::null())
                             .pre_exec(|| {
-                                setsid();
+                                unsafe { setsid(); }
                                 Ok(())
                             })
                             .spawn()
@@ -669,7 +669,7 @@ impl LauncherEngine {
                     .stderr(std::process::Stdio::null())
                     .stdin(std::process::Stdio::null())
                     .pre_exec(|| {
-                        setsid();
+                        unsafe { setsid(); }
                         Ok(())
                     })
                     .spawn()
@@ -806,3 +806,25 @@ pub fn remove_vietnamese_accents(s: &str) -> String {
         }
     }).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_remove_vietnamese_accents() {
+        assert_eq!(remove_vietnamese_accents("Tải xuống"), "tai xuong");
+        assert_eq!(remove_vietnamese_accents("Học tập"), "hoc tap");
+        assert_eq!(remove_vietnamese_accents("Đường dẫn"), "duong dan");
+        assert_eq!(remove_vietnamese_accents("Lập trình Rust"), "lap trinh rust");
+    }
+
+    #[test]
+    fn test_resolve_path_search() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        assert!(engine.resolve_path_search("downloads").is_none());
+        assert!(engine.resolve_path_search("/tmp/testfile").is_some());
+    }
+}
+
