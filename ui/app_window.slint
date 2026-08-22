@@ -153,7 +153,7 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // 1. TOP SEARCH BAR CONTAINER
+            // 1. TOP SEARCH BAR CONTAINER (Left Search Icon + Full Width Input + Right Tabs)
             search_box := Rectangle {
                 height: 52px;
                 background: #1b1e2e;
@@ -166,36 +166,32 @@ export component AppWindow inherits Window {
                     padding-left: 16px;
                     padding-right: 14px;
                     spacing: 12px;
-                    alignment: center;
 
-                    // 1.1 Fixed Vector Search Icon (Crisp SVG & Centered)
-                    HorizontalLayout {
-                        alignment: center;
+                    // 1.1 Fixed Vector Search Icon (Left)
+                    Rectangle {
                         width: 20px;
-                        height: 20px;
                         Image {
                             source: root.search_icon;
                             width: 18px;
                             height: 18px;
                             image-fit: contain;
-                            vertical-alignment: center;
-                            horizontal-alignment: center;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
                         }
                     }
 
-                    // 1.2 Text Input & Shortened Placeholder
+                    // 1.2 Text Input & Full-Stretch Placeholder
                     Rectangle {
                         horizontal-stretch: 1;
-                        height: 32px;
+                        clip: true;
 
                         Text {
                             x: 0px;
-                            y: 0px;
                             width: 100%;
                             height: 100%;
                             text: root.is_file_mode ? "Search files & folders (e.g. notes.pdf, ~/Projects)..." : "Search apps or type @ for files...";
                             color: #565f89;
-                            font-size: 14px;
+                            font-size: 15px;
                             font-italic: true;
                             vertical-alignment: center;
                             horizontal-alignment: left;
@@ -204,7 +200,6 @@ export component AppWindow inherits Window {
 
                         search_input := TextInput {
                             x: 0px;
-                            y: 0px;
                             width: 100%;
                             height: 100%;
                             text: root.search_text;
@@ -267,7 +262,7 @@ export component AppWindow inherits Window {
                     // 1.3 Segmented Control (Tabs: Mode + Settings Gear Icon)
                     HorizontalLayout {
                         spacing: 8px;
-                        alignment: end;
+                        alignment: center;
 
                         // Mode Tab Pill
                         Rectangle {
@@ -307,23 +302,20 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            HorizontalLayout {
-                                alignment: center;
-                                Image {
-                                    source: root.settings_icon;
-                                    width: 16px;
-                                    height: 16px;
-                                    image-fit: contain;
-                                    vertical-alignment: center;
-                                    horizontal-alignment: center;
-                                }
+                            Image {
+                                source: root.settings_icon;
+                                width: 16px;
+                                height: 16px;
+                                image-fit: contain;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
                             }
                         }
                     }
                 }
             }
 
-            // 1.4 Subtle Clean Tip (Beneath Search Box - No Bulb Icon)
+            // 1.4 Subtle Clean Tip (Beneath Search Box - Left Aligned)
             if root.search_text == "" : HorizontalLayout {
                 padding-left: 6px;
                 padding-right: 6px;
@@ -572,7 +564,6 @@ export component AppWindow inherits Window {
                                 height: 18px;
                                 border-width: 1px;
                                 border-color: #323854;
-
                                 HorizontalLayout {
                                     padding-left: 5px;
                                     padding-right: 5px;
@@ -595,7 +586,6 @@ export component AppWindow inherits Window {
                                 width: 22px;
                                 border-width: 1px;
                                 border-color: #323854;
-
                                 HorizontalLayout {
                                     alignment: center;
                                     Image {
@@ -622,7 +612,6 @@ export component AppWindow inherits Window {
                                 height: 18px;
                                 border-width: 1px;
                                 border-color: #323854;
-
                                 HorizontalLayout {
                                     padding-left: 5px;
                                     padding-right: 5px;
@@ -644,7 +633,6 @@ export component AppWindow inherits Window {
                                 height: 18px;
                                 border-width: 1px;
                                 border-color: #323854;
-
                                 HorizontalLayout {
                                     padding-left: 5px;
                                     padding-right: 5px;
