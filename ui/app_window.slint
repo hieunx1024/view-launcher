@@ -23,7 +23,7 @@ export component AppWindow inherits Window {
     in property <string> mode_title: "VIEW LAUNCHER";
     in property <string> mode_icon: "󰀻";
     in property <bool> is_file_mode: false;
-    in property <string> status_item_count: "0 items";
+    in property <string> status_item_count: "0 apps";
 
     callback search_text_changed(string);
     callback move_up();
@@ -33,7 +33,7 @@ export component AppWindow inherits Window {
     callback copy_path(int);
     callback open_config();
     callback close_window();
-    callback window_dragged(length, length);
+    callback start_window_drag();
 
     forward-focus: search_input;
 
@@ -54,13 +54,15 @@ export component AppWindow inherits Window {
             padding-bottom: 10px;
             spacing: 10px;
 
-            // 1. Top Header Bar (Drag Area)
+            // 1. Top Header Bar (Native Window Drag Area)
             header_bar := Rectangle {
-                height: 22px;
+                height: 24px;
 
                 TouchArea {
-                    moved => {
-                        root.window_dragged(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                    pointer-event(event) => {
+                        if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                            root.start_window_drag();
+                        }
                     }
                 }
 
@@ -119,49 +121,61 @@ export component AppWindow inherits Window {
                         vertical-alignment: center;
                     }
 
-                    // Input Field
-                    search_input := TextInput {
-                        text <=> root.search_text;
-                        font-size: 15px;
-                        color: #f0f6fc;
-                        selection-background-color: #3b4261;
-                        selection-foreground-color: #ffffff;
-                        vertical-alignment: center;
+                    // Input Field with Placeholder
+                    Rectangle {
+                        horizontal-stretch: 1;
 
-                        edited => {
-                            root.search_text_changed(self.text);
+                        if root.search_text == "" : Text {
+                            text: root.is_file_mode ? "Type to search files (e.g. @f notes.pdf)..." : "Search apps, type @f for files, or 500*12...";
+                            color: #565f89;
+                            font-size: 14px;
+                            font-italic: true;
+                            vertical-alignment: center;
                         }
 
-                        key-pressed(event) => {
-                            if (event.text == Key.Escape) {
-                                root.close_window();
-                                return accept;
+                        search_input := TextInput {
+                            text <=> root.search_text;
+                            font-size: 15px;
+                            color: #f0f6fc;
+                            selection-background-color: #3b4261;
+                            selection-foreground-color: #ffffff;
+                            vertical-alignment: center;
+
+                            edited => {
+                                root.search_text_changed(self.text);
                             }
-                            if (event.text == Key.Return) {
-                                root.item_activated(root.selected_index);
-                                return accept;
+
+                            key-pressed(event) => {
+                                if (event.text == Key.Escape) {
+                                    root.close_window();
+                                    return accept;
+                                }
+                                if (event.text == Key.Return) {
+                                    root.item_activated(root.selected_index);
+                                    return accept;
+                                }
+                                if (event.text == Key.DownArrow) {
+                                    root.move_down();
+                                    return accept;
+                                }
+                                if (event.text == Key.UpArrow) {
+                                    root.move_up();
+                                    return accept;
+                                }
+                                if (event.modifiers.control && event.text == ",") {
+                                    root.open_config();
+                                    return accept;
+                                }
+                                if (event.modifiers.alt && (event.text == "t" || event.text == "T")) {
+                                    root.open_in_terminal(root.selected_index);
+                                    return accept;
+                                }
+                                if (event.modifiers.alt && (event.text == "c" || event.text == "C")) {
+                                    root.copy_path(root.selected_index);
+                                    return accept;
+                                }
+                                return reject;
                             }
-                            if (event.text == Key.DownArrow) {
-                                root.move_down();
-                                return accept;
-                            }
-                            if (event.text == Key.UpArrow) {
-                                root.move_up();
-                                return accept;
-                            }
-                            if (event.modifiers.control && event.text == ",") {
-                                root.open_config();
-                                return accept;
-                            }
-                            if (event.modifiers.alt && (event.text == "t" || event.text == "T")) {
-                                root.open_in_terminal(root.selected_index);
-                                return accept;
-                            }
-                            if (event.modifiers.alt && (event.text == "c" || event.text == "C")) {
-                                root.copy_path(root.selected_index);
-                                return accept;
-                            }
-                            return reject;
                         }
                     }
                 }
@@ -302,7 +316,7 @@ export component AppWindow inherits Window {
 
                     HorizontalLayout {
                         spacing: 4px;
-                        Text { text: "[↵]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "[Enter]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
                         Text { text: "Open"; color: #565f89; font-size: 11px; vertical-alignment: center; }
                     }
 

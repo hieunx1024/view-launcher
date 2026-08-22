@@ -14,6 +14,7 @@ use std::thread;
 use config::Config;
 use icon_resolver::IconResolver;
 use launcher::{LauncherEngine, LauncherItem, open_config_file};
+use i_slint_backend_winit::WinitWindowAccessor;
 
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -319,16 +320,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // 10.1 Connect Window Dragged
+    // 10.1 Native Window Dragging on Wayland / X11 / Windows
     {
         let ui_weak = ui.as_weak();
-        ui.on_window_dragged(move |dx, dy| {
+        ui.on_start_window_drag(move || {
             if let Some(ui) = ui_weak.upgrade() {
-                let current_pos = ui.window().position();
-                let scale = ui.window().scale_factor();
-                let new_x = current_pos.x + (dx * scale) as i32;
-                let new_y = current_pos.y + (dy * scale) as i32;
-                ui.window().set_position(slint::PhysicalPosition::new(new_x, new_y));
+                ui.window().with_winit_window(|winit_window| {
+                    let _ = winit_window.drag_window();
+                });
             }
         });
     }
