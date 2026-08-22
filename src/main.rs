@@ -123,8 +123,12 @@ fn populate_items(
     let mut current_items = Vec::new();
     let mut slint_items = Vec::new();
 
-    for (item, _indices) in results.into_iter().take(40) {
-        let slint_icon = icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
+    for (item, _indices) in results.into_iter().take(20) {
+        let slint_icon = if item.item_type == launcher::ItemType::App {
+            icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path)
+        } else {
+            None
+        };
         let has_icon = slint_icon.is_some();
         let icon_img = slint_icon.unwrap_or_default();
         let category = item.get_category_tag().to_string();

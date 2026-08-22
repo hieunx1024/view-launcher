@@ -121,16 +121,17 @@ export component AppWindow inherits Window {
                         vertical-alignment: center;
                     }
 
-                    // Input Field with Placeholder
+                    // Input Field with Stable Static Placeholder
                     Rectangle {
                         horizontal-stretch: 1;
 
-                        if root.search_text == "" : Text {
+                        Text {
                             text: root.is_file_mode ? "Type to search files (e.g. @f notes.pdf)..." : "Search apps, type @f for files, or 500*12...";
                             color: #565f89;
                             font-size: 14px;
                             font-italic: true;
                             vertical-alignment: center;
+                            visible: root.search_text == "";
                         }
 
                         search_input := TextInput {
@@ -186,7 +187,8 @@ export component AppWindow inherits Window {
                 vertical-stretch: 1;
                 clip: true;
 
-                if !root.has_results : Rectangle {
+                Rectangle {
+                    visible: !root.has_results;
                     VerticalLayout {
                         alignment: center;
                         spacing: 8px;
@@ -205,7 +207,8 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if root.has_results : ListView {
+                ListView {
+                    visible: root.has_results;
                     for item[index] in root.items : item_row := Rectangle {
                         height: 42px;
                         background: (index == root.selected_index) ? #283457 : (item_touch.has-hover ? #1f2335 : transparent);

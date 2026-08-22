@@ -353,6 +353,9 @@ impl LauncherEngine {
                 })
                 .flatten()
             {
+                if files.len() >= 5000 {
+                    break;
+                }
                 let path = entry.path();
                 if path == root_path {
                     continue;
