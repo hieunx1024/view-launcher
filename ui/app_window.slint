@@ -12,7 +12,7 @@ export component AppWindow inherits Window {
     no-frame: true;
     background: transparent;
     width: 680px;
-    height: 560px;
+    height: 580px;
 
     in-out property <string> search_text: "";
     in-out property <int> selected_index: 0;
@@ -67,9 +67,76 @@ export component AppWindow inherits Window {
             visible: !root.in_settings_mode;
             padding-left: 18px;
             padding-right: 18px;
-            padding-top: 16px;
+            padding-top: 10px;
             padding-bottom: 14px;
             spacing: 10px;
+
+            // 0. DEDICATED VIRTUAL TITLEBAR & DRAG REGION (28px)
+            title_bar := Rectangle {
+                height: 28px;
+
+                // Drag region TouchArea covers entire bar
+                drag_region := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    pointer-event(event) => {
+                        if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                            root.start_window_drag();
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: space-between;
+                    padding-left: 4px;
+                    padding-right: 2px;
+
+                    // Left Brand / Title (Non-blocking)
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: start;
+                        Text {
+                            text: "✦";
+                            color: #7aa2f7;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "View Launcher";
+                            color: #787c99;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    // Right Window Controls (Dedicated TouchArea)
+                    HorizontalLayout {
+                        alignment: end;
+                        close_btn := Rectangle {
+                            width: 22px;
+                            height: 22px;
+                            border-radius: 5px;
+                            background: close_touch.has-hover ? #f7768e33 : transparent;
+
+                            close_touch := TouchArea {
+                                clicked => {
+                                    root.close_window();
+                                }
+                            }
+
+                            Text {
+                                text: "✕";
+                                color: close_touch.has-hover ? #f7768e : #565f89;
+                                font-size: 11px;
+                                font-weight: 800;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
 
             // 1. TOP SEARCH BAR CONTAINER
             search_box := Rectangle {
@@ -83,11 +150,6 @@ export component AppWindow inherits Window {
                 TouchArea {
                     clicked => {
                         search_input.focus();
-                    }
-                    pointer-event(event) => {
-                        if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
-                            root.start_window_drag();
-                        }
                     }
                 }
 
@@ -526,58 +588,71 @@ export component AppWindow inherits Window {
             visible: root.in_settings_mode;
             padding-left: 22px;
             padding-right: 22px;
-            padding-top: 18px;
+            padding-top: 14px;
             padding-bottom: 18px;
-            spacing: 14px;
+            spacing: 12px;
 
-            // 1. Settings Header Bar
-            HorizontalLayout {
-                height: 32px;
-                alignment: space-between;
+            // 0. Settings Drag Bar (28px)
+            settings_title_bar := Rectangle {
+                height: 28px;
 
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: start;
-                    Text {
-                        text: "⚙";
-                        color: #7aa2f7;
-                        font-size: 16px;
-                        font-weight: 800;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: "VIEW LAUNCHER PREFERENCES";
-                        color: #ffffff;
-                        font-size: 14px;
-                        font-weight: 800;
-                        vertical-alignment: center;
+                settings_drag_region := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    pointer-event(event) => {
+                        if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                            root.start_window_drag();
+                        }
                     }
                 }
 
-                // Back Button [Esc]
-                back_btn := Rectangle {
-                    height: 28px;
-                    background: back_touch.has-hover ? #2e344f : #1b1e2e;
-                    border-radius: 6px;
-                    border-width: 1px;
-                    border-color: #343b58;
+                HorizontalLayout {
+                    alignment: space-between;
 
-                    back_touch := TouchArea {
-                        clicked => {
-                            root.close_settings();
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        Text {
+                            text: "⚙";
+                            color: #7aa2f7;
+                            font-size: 15px;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "VIEW LAUNCHER PREFERENCES";
+                            color: #ffffff;
+                            font-size: 13px;
+                            font-weight: 800;
+                            vertical-alignment: center;
                         }
                     }
 
-                    HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 6px;
-                        Text {
-                            text: "← Back [Esc]";
-                            color: #c0caf5;
-                            font-size: 12px;
-                            font-weight: 700;
-                            vertical-alignment: center;
+                    // Back Button [Esc]
+                    back_btn := Rectangle {
+                        height: 26px;
+                        background: back_touch.has-hover ? #2e344f : #1b1e2e;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: #343b58;
+
+                        back_touch := TouchArea {
+                            clicked => {
+                                root.close_settings();
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 6px;
+                            Text {
+                                text: "← Back [Esc]";
+                                color: #c0caf5;
+                                font-size: 11px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
                         }
                     }
                 }
@@ -585,10 +660,10 @@ export component AppWindow inherits Window {
 
             Rectangle { height: 1px; background: #ffffff0d; }
 
-            // 2. Settings Content Area
+            // 1. Settings Content Area
             VerticalLayout {
                 vertical-stretch: 1;
-                spacing: 12px;
+                spacing: 10px;
 
                 // Group 1: Appearance
                 Text {
@@ -600,7 +675,7 @@ export component AppWindow inherits Window {
 
                 // Setting: Show App Icons
                 Rectangle {
-                    height: 42px;
+                    height: 40px;
                     background: #1b1e2e;
                     border-radius: 8px;
                     border-width: 1px;
@@ -640,7 +715,7 @@ export component AppWindow inherits Window {
 
                 // Setting: Show Status Bar
                 Rectangle {
-                    height: 42px;
+                    height: 40px;
                     background: #1b1e2e;
                     border-radius: 8px;
                     border-width: 1px;
@@ -688,7 +763,7 @@ export component AppWindow inherits Window {
 
                 // Setting: Match Full Path
                 Rectangle {
-                    height: 42px;
+                    height: 40px;
                     background: #1b1e2e;
                     border-radius: 8px;
                     border-width: 1px;
@@ -728,7 +803,7 @@ export component AppWindow inherits Window {
 
                 // Setting: Max Results Selector
                 Rectangle {
-                    height: 42px;
+                    height: 40px;
                     background: #1b1e2e;
                     border-radius: 8px;
                     border-width: 1px;
@@ -774,7 +849,7 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // 3. Status Toast Notification
+            // 2. Status Toast Notification
             if root.settings_status != "" : Text {
                 text: root.settings_status;
                 color: #9ece6a;
@@ -785,7 +860,7 @@ export component AppWindow inherits Window {
 
             Rectangle { height: 1px; background: #ffffff0d; }
 
-            // 4. Action Buttons
+            // 3. Action Buttons
             HorizontalLayout {
                 height: 38px;
                 spacing: 12px;
