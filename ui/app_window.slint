@@ -11,8 +11,8 @@ export component AppWindow inherits Window {
     title: "View Launcher";
     no-frame: true;
     background: transparent;
-    width: 680px;
-    height: 544px;
+    width: 660px;
+    height: 500px;
 
     in-out property <string> search_text: "";
     in-out property <int> selected_index: 0;
@@ -83,12 +83,12 @@ export component AppWindow inherits Window {
             padding-left: 16px;
             padding-right: 16px;
             padding-top: 8px;
-            padding-bottom: 10px;
+            padding-bottom: 8px;
             spacing: 6px;
 
-            // 0. DEDICATED VIRTUAL TITLEBAR & DRAG REGION (24px)
+            // 0. DEDICATED VIRTUAL TITLEBAR & DRAG REGION (22px)
             title_bar := Rectangle {
-                height: 24px;
+                height: 22px;
 
                 // Drag region TouchArea covers entire bar
                 drag_region := TouchArea {
@@ -167,16 +167,17 @@ export component AppWindow inherits Window {
                     padding-right: 12px;
                     spacing: 10px;
 
-                    // 1.1 Fixed Vector Search Icon (Left)
-                    Rectangle {
-                        width: 20px;
+                    // 1.1 Fixed Vector Search Icon (Centered)
+                    VerticalLayout {
+                        alignment: center;
+                        width: 18px;
                         Image {
                             source: root.search_icon;
-                            width: 17px;
-                            height: 17px;
+                            width: 18px;
+                            height: 18px;
                             image-fit: contain;
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
                         }
                     }
 
@@ -185,21 +186,22 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 1;
                         clip: true;
 
-                        Text {
+                        if root.search_text == "" : Text {
                             x: 0px;
+                            y: 0px;
                             width: 100%;
                             height: 100%;
                             text: root.is_file_mode ? "Search files & folders (e.g. notes.pdf, ~/Projects)..." : "Search apps or type @ for files...";
                             color: #565f89;
-                            font-size: 14px;
+                            font-size: 14.5px;
                             font-italic: true;
                             vertical-alignment: center;
                             horizontal-alignment: left;
-                            visible: root.search_text == "";
                         }
 
                         search_input := TextInput {
                             x: 0px;
+                            y: 0px;
                             width: 100%;
                             height: 100%;
                             text: root.search_text;
@@ -260,62 +262,67 @@ export component AppWindow inherits Window {
                     }
 
                     // 1.3 Segmented Control (Tabs: Mode + Settings Gear Icon)
-                    HorizontalLayout {
-                        spacing: 6px;
+                    VerticalLayout {
                         alignment: center;
+                        HorizontalLayout {
+                            spacing: 6px;
 
-                        // Mode Tab Pill
-                        Rectangle {
-                            height: 24px;
-                            background: root.is_file_mode ? #122833 : #17223b;
-                            border-radius: 5px;
-                            border-width: 1px;
-                            border-color: root.is_file_mode ? #2ac3de : #3d59a1;
+                            // Mode Tab Pill
+                            Rectangle {
+                                height: 24px;
+                                background: root.is_file_mode ? #122833 : #17223b;
+                                border-radius: 5px;
+                                border-width: 1px;
+                                border-color: root.is_file_mode ? #2ac3de : #3d59a1;
 
-                            HorizontalLayout {
-                                padding-left: 9px;
-                                padding-right: 9px;
-                                alignment: center;
-                                Text {
-                                    text: root.mode_title;
-                                    color: root.is_file_mode ? #2ac3de : #7dcfff;
-                                    font-size: 10.5px;
-                                    font-weight: 800;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-
-                        // Settings Gear Icon Button
-                        settings_btn := Rectangle {
-                            width: 28px;
-                            height: 24px;
-                            background: settings_touch.has-hover ? #2e3654 : #161824;
-                            border-radius: 5px;
-                            border-width: 1px;
-                            border-color: #343b58;
-                            animate background, border-color { duration: 150ms; easing: ease-out; }
-
-                            settings_touch := TouchArea {
-                                clicked => {
-                                    root.open_config();
+                                HorizontalLayout {
+                                    padding-left: 9px;
+                                    padding-right: 9px;
+                                    alignment: center;
+                                    Text {
+                                        text: root.mode_title;
+                                        color: root.is_file_mode ? #2ac3de : #7dcfff;
+                                        font-size: 10.5px;
+                                        font-weight: 800;
+                                        vertical-alignment: center;
+                                    }
                                 }
                             }
 
-                            Image {
-                                source: root.settings_icon;
-                                width: 15px;
-                                height: 15px;
-                                image-fit: contain;
-                                x: (parent.width - self.width) / 2;
-                                y: (parent.height - self.height) / 2;
+                            // Settings Gear Icon Button
+                            settings_btn := Rectangle {
+                                width: 28px;
+                                height: 24px;
+                                background: settings_touch.has-hover ? #2e3654 : #161824;
+                                border-radius: 5px;
+                                border-width: 1px;
+                                border-color: #343b58;
+                                animate background, border-color { duration: 150ms; easing: ease-out; }
+
+                                settings_touch := TouchArea {
+                                    clicked => {
+                                        root.open_config();
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    alignment: center;
+                                    Image {
+                                        source: root.settings_icon;
+                                        width: 14px;
+                                        height: 14px;
+                                        image-fit: contain;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // 1.4 Subtle Clean Tip (Beneath Search Box - Clean Left Aligned)
+            // 1.4 Subtle Clean Tip (Beneath Search Box - Left-Aligned with Search Box Margin)
             if root.search_text == "" : HorizontalLayout {
                 padding-left: 4px;
                 padding-right: 4px;
@@ -368,19 +375,18 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                // 2.2 Scrollable Virtual Container
+                // 2.2 Scrollable Virtual Container (Exactly 7 items fit without cut-off)
                 list_flickable := Flickable {
                     visible: root.has_results;
                     viewport-y <=> root.scroll_viewport_y;
-                    viewport-height: root.items.length * 49px;
+                    viewport-height: root.items.length * 48px;
 
                     VerticalLayout {
-                        spacing: 3px;
+                        spacing: 2px;
                         alignment: start;
 
                         for item[index] in root.items : item_row := Rectangle {
                             height: 46px;
-                            // State Handling: Selected (Keyboard) vs Hover (Mouse) vs Default
                             background: (index == root.selected_index) ? #262f4d : (item_touch.has-hover ? #1a1e30 : transparent);
                             border-radius: 9px;
                             border-width: 1px;
@@ -515,7 +521,7 @@ export component AppWindow inherits Window {
 
             // 3. KEYBOARD AFFORDANCE FOOTER BAR (Crisp Vectors & Balanced Badges)
             if root.cfg_show_status_bar : footer := Rectangle {
-                height: 24px;
+                height: 22px;
 
                 HorizontalLayout {
                     alignment: space-between;
