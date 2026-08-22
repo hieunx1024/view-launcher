@@ -274,6 +274,7 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 10px;
                                 padding-right: 10px;
+                                alignment: center;
                                 Text {
                                     text: root.mode_title;
                                     color: root.is_file_mode ? #2ac3de : #7dcfff;
@@ -323,12 +324,17 @@ export component AppWindow inherits Window {
                 spacing: 6px;
                 alignment: start;
 
-                Image {
-                    source: root.bulb_icon;
-                    width: 13px;
-                    height: 13px;
-                    image-fit: contain;
-                    vertical-alignment: center;
+                HorizontalLayout {
+                    alignment: center;
+                    width: 14px;
+                    Image {
+                        source: root.bulb_icon;
+                        width: 13px;
+                        height: 13px;
+                        image-fit: contain;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                    }
                 }
 
                 Text {
@@ -351,12 +357,16 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         alignment: center;
                         spacing: 8px;
-                        Image {
-                            source: root.search_icon;
-                            width: 36px;
-                            height: 36px;
-                            image-fit: contain;
-                            horizontal-alignment: center;
+                        HorizontalLayout {
+                            alignment: center;
+                            Image {
+                                source: root.search_icon;
+                                width: 36px;
+                                height: 36px;
+                                image-fit: contain;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
                         }
                         Text {
                             text: (root.search_text != "") ? "No results for '\{root.search_text}'" : "No applications found";
@@ -440,6 +450,8 @@ export component AppWindow inherits Window {
                                             width: 26px;
                                             height: 26px;
                                             image-fit: contain;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
                                         }
 
                                         // Fallback text/glyph icon
@@ -490,6 +502,7 @@ export component AppWindow inherits Window {
                                         HorizontalLayout {
                                             padding-left: 9px;
                                             padding-right: 9px;
+                                            alignment: center;
                                             Text {
                                                 text: item.category;
                                                 // Text Color per Category
@@ -516,9 +529,9 @@ export component AppWindow inherits Window {
                 background: #ffffff0d; // 5% opacity divider
             }
 
-            // 3. KEYBOARD AFFORDANCE FOOTER BAR (Crisp Vectors & Clean Badges)
+            // 3. KEYBOARD AFFORDANCE FOOTER BAR (Crisp Vectors & Balanced Badges)
             if root.cfg_show_status_bar : footer := Rectangle {
-                height: 26px;
+                height: 28px;
 
                 HorizontalLayout {
                     alignment: space-between;
@@ -530,14 +543,17 @@ export component AppWindow inherits Window {
 
                         // Navigate (Vector Arrows)
                         HorizontalLayout {
-                            spacing: 5px;
+                            spacing: 6px;
+                            alignment: center;
+
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 19px;
-                                width: 22px;
+                                height: 20px;
+                                width: 24px;
                                 border-width: 1px;
                                 border-color: #323854;
+
                                 HorizontalLayout {
                                     alignment: center;
                                     Image {
@@ -555,16 +571,20 @@ export component AppWindow inherits Window {
 
                         // Tab In
                         if root.is_file_mode : HorizontalLayout {
-                            spacing: 5px;
+                            spacing: 6px;
+                            alignment: center;
+
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 19px;
+                                height: 20px;
                                 border-width: 1px;
                                 border-color: #323854;
+
                                 HorizontalLayout {
-                                    padding-left: 5px;
-                                    padding-right: 5px;
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    alignment: center;
                                     Text { text: "Tab"; color: #2ac3de; font-weight: 800; font-size: 11px; vertical-alignment: center; }
                                 }
                             }
@@ -573,14 +593,17 @@ export component AppWindow inherits Window {
 
                         // Open (Vector Return Key)
                         HorizontalLayout {
-                            spacing: 5px;
+                            spacing: 6px;
+                            alignment: center;
+
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 19px;
-                                width: 22px;
+                                height: 20px;
+                                width: 24px;
                                 border-width: 1px;
                                 border-color: #323854;
+
                                 HorizontalLayout {
                                     alignment: center;
                                     Image {
@@ -598,16 +621,20 @@ export component AppWindow inherits Window {
 
                         // Esc Close
                         HorizontalLayout {
-                            spacing: 5px;
+                            spacing: 6px;
+                            alignment: center;
+
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 19px;
+                                height: 20px;
                                 border-width: 1px;
                                 border-color: #323854;
+
                                 HorizontalLayout {
-                                    padding-left: 5px;
-                                    padding-right: 5px;
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    alignment: center;
                                     Text { text: "Esc"; color: #f7768e; font-weight: 800; font-size: 11px; vertical-alignment: center; }
                                 }
                             }
@@ -616,16 +643,20 @@ export component AppWindow inherits Window {
 
                         // Ctrl+, Settings
                         HorizontalLayout {
-                            spacing: 5px;
+                            spacing: 6px;
+                            alignment: center;
+
                             Rectangle {
                                 background: #1b1e2e;
                                 border-radius: 4px;
-                                height: 19px;
+                                height: 20px;
                                 border-width: 1px;
                                 border-color: #323854;
+
                                 HorizontalLayout {
-                                    padding-left: 5px;
-                                    padding-right: 5px;
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    alignment: center;
                                     Text { text: "Ctrl+,"; color: #7aa2f7; font-weight: 800; font-size: 11px; vertical-alignment: center; }
                                 }
                             }
@@ -695,12 +726,17 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 8px;
                                 alignment: start;
-                                Text {
-                                    text: "⚙";
-                                    color: #7aa2f7;
-                                    font-size: 15px;
-                                    font-weight: 800;
-                                    vertical-alignment: center;
+                                HorizontalLayout {
+                                    alignment: center;
+                                    width: 18px;
+                                    Image {
+                                        source: root.settings_icon;
+                                        width: 16px;
+                                        height: 16px;
+                                        image-fit: contain;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
+                                    }
                                 }
                                 Text {
                                     text: "VIEW LAUNCHER PREFERENCES";
@@ -728,7 +764,7 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     padding-left: 12px;
                                     padding-right: 12px;
-                                    spacing: 6px;
+                                    alignment: center;
                                     Text {
                                         text: "← Back [Esc]";
                                         color: #c0caf5;
@@ -758,14 +794,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Show App Icons
                         Rectangle {
-                            height: 40px;
+                            height: 44px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 14px;
-                                padding-right: 14px;
+                                padding-left: 16px;
+                                padding-right: 16px;
                                 alignment: space-between;
                                 Text {
                                     text: "Show Native Application Icons";
@@ -774,23 +810,29 @@ export component AppWindow inherits Window {
                                     font-weight: 600;
                                     vertical-alignment: center;
                                 }
-                                toggle_icon := Rectangle {
-                                    width: 64px;
-                                    height: 26px;
-                                    border-radius: 13px;
-                                    background: root.cfg_show_icons ? #7aa2f7 : #343b58;
-                                    TouchArea {
-                                        clicked => {
-                                            root.cfg_show_icons = !root.cfg_show_icons;
+                                HorizontalLayout {
+                                    alignment: end;
+                                    toggle_icon := Rectangle {
+                                        width: 60px;
+                                        height: 28px;
+                                        border-radius: 14px;
+                                        background: root.cfg_show_icons ? #7aa2f7 : #343b58;
+                                        TouchArea {
+                                            clicked => {
+                                                root.cfg_show_icons = !root.cfg_show_icons;
+                                            }
                                         }
-                                    }
-                                    Text {
-                                        text: root.cfg_show_icons ? "ON" : "OFF";
-                                        color: root.cfg_show_icons ? #14151e : #a9b1d6;
-                                        font-size: 11px;
-                                        font-weight: 800;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: root.cfg_show_icons ? "ON" : "OFF";
+                                                color: root.cfg_show_icons ? #14151e : #a9b1d6;
+                                                font-size: 11px;
+                                                font-weight: 800;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -798,14 +840,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Show Status Bar
                         Rectangle {
-                            height: 40px;
+                            height: 44px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 14px;
-                                padding-right: 14px;
+                                padding-left: 16px;
+                                padding-right: 16px;
                                 alignment: space-between;
                                 Text {
                                     text: "Show Bottom Keyboard Shortcuts Bar";
@@ -814,23 +856,29 @@ export component AppWindow inherits Window {
                                     font-weight: 600;
                                     vertical-alignment: center;
                                 }
-                                toggle_bar := Rectangle {
-                                    width: 64px;
-                                    height: 26px;
-                                    border-radius: 13px;
-                                    background: root.cfg_show_status_bar ? #7aa2f7 : #343b58;
-                                    TouchArea {
-                                        clicked => {
-                                            root.cfg_show_status_bar = !root.cfg_show_status_bar;
+                                HorizontalLayout {
+                                    alignment: end;
+                                    toggle_bar := Rectangle {
+                                        width: 60px;
+                                        height: 28px;
+                                        border-radius: 14px;
+                                        background: root.cfg_show_status_bar ? #7aa2f7 : #343b58;
+                                        TouchArea {
+                                            clicked => {
+                                                root.cfg_show_status_bar = !root.cfg_show_status_bar;
+                                            }
                                         }
-                                    }
-                                    Text {
-                                        text: root.cfg_show_status_bar ? "ON" : "OFF";
-                                        color: root.cfg_show_status_bar ? #14151e : #a9b1d6;
-                                        font-size: 11px;
-                                        font-weight: 800;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: root.cfg_show_status_bar ? "ON" : "OFF";
+                                                color: root.cfg_show_status_bar ? #14151e : #a9b1d6;
+                                                font-size: 11px;
+                                                font-weight: 800;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -846,14 +894,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Match Full Path
                         Rectangle {
-                            height: 40px;
+                            height: 44px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 14px;
-                                padding-right: 14px;
+                                padding-left: 16px;
+                                padding-right: 16px;
                                 alignment: space-between;
                                 Text {
                                     text: "Match Full File & Directory Paths";
@@ -862,23 +910,29 @@ export component AppWindow inherits Window {
                                     font-weight: 600;
                                     vertical-alignment: center;
                                 }
-                                toggle_path := Rectangle {
-                                    width: 64px;
-                                    height: 26px;
-                                    border-radius: 13px;
-                                    background: root.cfg_enable_path_matching ? #2ac3de : #343b58;
-                                    TouchArea {
-                                        clicked => {
-                                            root.cfg_enable_path_matching = !root.cfg_enable_path_matching;
+                                HorizontalLayout {
+                                    alignment: end;
+                                    toggle_path := Rectangle {
+                                        width: 60px;
+                                        height: 28px;
+                                        border-radius: 14px;
+                                        background: root.cfg_enable_path_matching ? #2ac3de : #343b58;
+                                        TouchArea {
+                                            clicked => {
+                                                root.cfg_enable_path_matching = !root.cfg_enable_path_matching;
+                                            }
                                         }
-                                    }
-                                    Text {
-                                        text: root.cfg_enable_path_matching ? "ON" : "OFF";
-                                        color: root.cfg_enable_path_matching ? #14151e : #a9b1d6;
-                                        font-size: 11px;
-                                        font-weight: 800;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: root.cfg_enable_path_matching ? "ON" : "OFF";
+                                                color: root.cfg_enable_path_matching ? #14151e : #a9b1d6;
+                                                font-size: 11px;
+                                                font-weight: 800;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -886,14 +940,14 @@ export component AppWindow inherits Window {
 
                         // Setting: Max Results Selector
                         Rectangle {
-                            height: 40px;
+                            height: 44px;
                             background: #1b1e2e;
                             border-radius: 8px;
                             border-width: 1px;
                             border-color: #282c44;
                             HorizontalLayout {
-                                padding-left: 14px;
-                                padding-right: 14px;
+                                padding-left: 16px;
+                                padding-right: 16px;
                                 alignment: space-between;
                                 Text {
                                     text: "Max Visible Search Results";
@@ -908,7 +962,7 @@ export component AppWindow inherits Window {
 
                                     for num in [5, 7, 9] : Rectangle {
                                         width: 36px;
-                                        height: 26px;
+                                        height: 28px;
                                         border-radius: 6px;
                                         background: (root.cfg_max_results == num) ? #7aa2f7 : #14151e;
                                         border-width: 1px;
@@ -918,13 +972,16 @@ export component AppWindow inherits Window {
                                                 root.cfg_max_results = num;
                                             }
                                         }
-                                        Text {
-                                            text: "\{num}";
-                                            color: (root.cfg_max_results == num) ? #14151e : #c0caf5;
-                                            font-size: 12px;
-                                            font-weight: 800;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: "\{num}";
+                                                color: (root.cfg_max_results == num) ? #14151e : #c0caf5;
+                                                font-size: 12px;
+                                                font-weight: 800;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
                                         }
                                     }
                                 }
@@ -965,6 +1022,7 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 16px;
                                 padding-right: 16px;
+                                alignment: center;
                                 Text {
                                     text: "📝 Edit config.toml";
                                     color: #c0caf5;
@@ -995,10 +1053,11 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 20px;
                                 padding-right: 20px;
+                                alignment: center;
                                 Text {
                                     text: "💾 Save & Apply Changes";
                                     color: #14151e;
-                                    font-size: 13px;
+                                    font-size: 12px;
                                     font-weight: 800;
                                     vertical-alignment: center;
                                 }
