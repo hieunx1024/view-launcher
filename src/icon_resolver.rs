@@ -20,6 +20,7 @@ const SVG_BULB: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://ww
 
 /// High-performance thread-safe icon resolver with O(1) in-memory index and pre-decoding cache.
 pub struct IconResolver {
+    #[allow(dead_code)]
     icon_path_index: Arc<RwLock<HashMap<String, PathBuf>>>,
     image_cache: Arc<RwLock<HashMap<String, Option<slint::Image>>>>,
     file_type_cache: Arc<RwLock<HashMap<&'static str, slint::Image>>>,
@@ -27,6 +28,7 @@ pub struct IconResolver {
 
 impl IconResolver {
     pub fn new() -> Self {
+        #[allow(unused_mut)]
         let mut path_index = HashMap::new();
 
         #[cfg(not(target_os = "windows"))]
@@ -260,7 +262,7 @@ impl IconResolver {
         Some(slint::Image::from_rgba8(pixel_buf))
     }
 
-    fn find_icon_path(&self, icon_hint: Option<&str>, app_name: &str, exec_or_path: &str) -> Option<PathBuf> {
+    fn find_icon_path(&self, #[allow(unused_variables)] icon_hint: Option<&str>, #[allow(unused_variables)] app_name: &str, #[allow(unused_variables)] exec_or_path: &str) -> Option<PathBuf> {
         #[cfg(not(target_os = "windows"))]
         {
             // Direct absolute path

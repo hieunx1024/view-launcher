@@ -234,6 +234,7 @@ impl LauncherEngine {
     }
 
     /// Parses a Linux .desktop entry file line by line to extract the core fields.
+    #[allow(dead_code)]
     fn parse_desktop_file(&self, path: &Path) -> Option<LauncherItem> {
         let file = File::open(path).ok()?;
         let reader = BufReader::new(file);

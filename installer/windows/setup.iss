@@ -40,21 +40,21 @@ Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu
-Name: "{group}\{#MyAppName}"; Filename: "wt.exe"; Parameters: "-d . ""{app}\{#MyAppExeName}"""; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Desktop
-Name: "{autodesktop}\{#MyAppName}"; Filename: "wt.exe"; Parameters: "-d . ""{app}\{#MyAppExeName}"""; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
-; Startup (with hotkey Ctrl+Alt+Space)
-Name: "{userstartup}\ViewLauncher"; Filename: "wt.exe"; Parameters: "-d . ""{app}\{#MyAppExeName}"""; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"; Tasks: startupicon
+; Startup (with hotkey)
+Name: "{userstartup}\ViewLauncher"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\view-launcher.ico"; WorkingDir: "{app}"; Tasks: startupicon
 
 [Registry]
 ; Add install folder to User PATH
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath(ExpandConstant('{app}'))
 
 [Run]
-Filename: "wt.exe"; Parameters: "-d . ""{app}\{#MyAppExeName}"""; Description: "Launch View Launcher now (Ctrl+Alt+Space)"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch View Launcher now"; Flags: postinstall nowait skipifsilent
 
 [Code]
 function NeedsAddPath(Param: string): boolean;

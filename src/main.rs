@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -73,7 +74,7 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<
 }
 
 #[cfg(windows)]
-fn handle_single_instance(_exit_trigger: Arc<AtomicBool>, _ui_handle: slint::Weak<AppWindow>) -> bool {
+fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) -> bool {
     // Port 42425 on localhost for Windows single instance
     if let Ok(mut stream) = TcpStream::connect("127.0.0.1:42425") {
         let _ = stream.write_all(b"toggle");
@@ -82,8 +83,24 @@ fn handle_single_instance(_exit_trigger: Arc<AtomicBool>, _ui_handle: slint::Wea
 
     if let Ok(listener) = TcpListener::bind("127.0.0.1:42425") {
         thread::spawn(move || {
-            for _ in listener.incoming() {
-                // Wake up window
+            for stream in listener.incoming() {
+                if stream.is_ok() {
+                    let _ = slint::invoke_from_event_loop({
+                        let ui_weak = ui_handle.clone();
+                        let exit_flag = exit_trigger.clone();
+                        move || {
+                            if let Some(ui) = ui_weak.upgrade() {
+                                if ui.window().is_visible() {
+                                    exit_flag.store(true, Ordering::SeqCst);
+                                    let _ = ui.hide();
+                                } else {
+                                    let _ = ui.show();
+                                    ui.invoke_focus_search();
+                                }
+                            }
+                        }
+                    });
+                }
             }
         });
     }
