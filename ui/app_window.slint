@@ -1,4 +1,4 @@
-import { ScrollView, ListView } from "std-widgets.slint";
+import { ListView } from "std-widgets.slint";
 
 export struct LauncherItemData {
     name: string,
@@ -56,10 +56,10 @@ export component AppWindow inherits Window {
             // 1. Top Header Bar
             HorizontalLayout {
                 height: 22px;
-                alignment: space-between;
 
                 HorizontalLayout {
                     spacing: 6px;
+                    alignment: start;
                     Text {
                         text: root.mode_icon;
                         color: root.is_file_mode ? #2ac3de : #7aa2f7;
@@ -72,17 +72,19 @@ export component AppWindow inherits Window {
                         color: root.is_file_mode ? #2ac3de : #7aa2f7;
                         font-size: 12px;
                         font-weight: 700;
-                        letter-spacing: 1px;
                         vertical-alignment: center;
                     }
                 }
 
-                Text {
-                    text: root.status_item_count;
-                    color: #565f89;
-                    font-size: 12px;
-                    font-weight: 600;
-                    vertical-alignment: center;
+                HorizontalLayout {
+                    alignment: end;
+                    Text {
+                        text: root.status_item_count;
+                        color: #565f89;
+                        font-size: 12px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
                 }
             }
 
@@ -197,28 +199,35 @@ export component AppWindow inherits Window {
                             padding-left: 8px;
                             padding-right: 12px;
                             spacing: 12px;
-                            alignment: space-between;
 
                             // Left Side: Selection indicator + App Icon + Item Name
                             HorizontalLayout {
                                 spacing: 10px;
+                                alignment: start;
+                                horizontal-stretch: 1;
 
                                 // Active selection vertical pill
-                                Rectangle {
+                                HorizontalLayout {
+                                    alignment: center;
                                     width: 3px;
-                                    height: 18px;
-                                    border-radius: 2px;
-                                    background: (index == root.selected_index) ? #7dcfff : transparent;
-                                    vertical-alignment: center;
+                                    Rectangle {
+                                        width: 3px;
+                                        height: 18px;
+                                        border-radius: 2px;
+                                        background: (index == root.selected_index) ? #7dcfff : transparent;
+                                    }
                                 }
 
                                 // Real System Icon Image
-                                if item.has_icon : Image {
-                                    source: item.icon;
+                                if item.has_icon : HorizontalLayout {
+                                    alignment: center;
                                     width: 24px;
-                                    height: 24px;
-                                    image-fit: contain;
-                                    vertical-alignment: center;
+                                    Image {
+                                        source: item.icon;
+                                        width: 24px;
+                                        height: 24px;
+                                        image-fit: contain;
+                                    }
                                 }
 
                                 // Fallback icon when no image
@@ -241,23 +250,25 @@ export component AppWindow inherits Window {
                             }
 
                             // Right Side: Category Badge / Path preview
-                            Rectangle {
-                                background: (index == root.selected_index) ? #1f2335 : #24283b;
-                                border-radius: 4px;
-                                height: 22px;
-                                border-width: 1px;
-                                border-color: (index == root.selected_index) ? #3b4261 : #292e42;
-                                vertical-alignment: center;
+                            HorizontalLayout {
+                                alignment: end;
+                                Rectangle {
+                                    background: (index == root.selected_index) ? #1f2335 : #24283b;
+                                    border-radius: 4px;
+                                    height: 22px;
+                                    border-width: 1px;
+                                    border-color: (index == root.selected_index) ? #3b4261 : #292e42;
 
-                                HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    Text {
-                                        text: item.category;
-                                        color: (index == root.selected_index) ? #7dcfff : #7aa2f7;
-                                        font-size: 11px;
-                                        font-weight: 600;
-                                        vertical-alignment: center;
+                                    HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+                                        Text {
+                                            text: item.category;
+                                            color: (index == root.selected_index) ? #7dcfff : #7aa2f7;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
                                     }
                                 }
                             }
@@ -266,11 +277,15 @@ export component AppWindow inherits Window {
                 }
             }
 
+            // Divider line above footer
+            Rectangle {
+                height: 1px;
+                background: #292e42;
+            }
+
             // 4. Clean Footer Status Bar
             footer := Rectangle {
                 height: 26px;
-                border-top-width: 1px;
-                border-color: #292e42;
 
                 HorizontalLayout {
                     alignment: center;
