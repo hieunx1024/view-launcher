@@ -117,7 +117,8 @@ fn populate_items(
     let mut current_items = Vec::new();
     let mut slint_items = Vec::new();
 
-    for (item, _indices) in results.into_iter().take(9) {
+    let limit = (ui.get_cfg_max_results() as usize).clamp(4, 10);
+    for (item, _indices) in results.into_iter().take(limit) {
         let slint_icon = if item.item_type == launcher::ItemType::App {
             icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path)
         } else {

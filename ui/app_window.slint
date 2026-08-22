@@ -12,13 +12,13 @@ export component AppWindow inherits Window {
     no-frame: true;
     background: transparent;
     width: 680px;
-    height: 480px;
+    height: 490px;
 
     in-out property <string> search_text: "";
     in-out property <int> selected_index: 0;
     in property <[LauncherItemData]> items: [];
     in property <bool> has_results: true;
-    in property <string> mode_title: "VIEW LAUNCHER";
+    in property <string> mode_title: "APPLICATIONS";
     in property <string> mode_icon: "󰀻";
     in property <bool> is_file_mode: false;
     in property <string> status_item_count: "0 apps";
@@ -28,7 +28,7 @@ export component AppWindow inherits Window {
     in-out property <bool> cfg_show_icons: true;
     in-out property <bool> cfg_show_status_bar: true;
     in-out property <bool> cfg_enable_path_matching: true;
-    in-out property <int> cfg_max_results: 10;
+    in-out property <int> cfg_max_results: 8;
     in-out property <int> cfg_max_depth: 2;
     in-out property <string> settings_status: "";
 
@@ -51,32 +51,39 @@ export component AppWindow inherits Window {
         search_input.focus();
     }
 
-    // Main Card Container with rounded corners & Tokyo Night dark palette
+    // Main Outer Container (Spotlight / Raycast Floating Card)
     main_card := Rectangle {
         width: 100%;
         height: 100%;
-        background: #1a1b26;
-        border-radius: 14px;
+        background: #16161e;
+        border-radius: 16px;
         border-width: 1px;
-        border-color: #3b4261;
+        border-color: #2e344f;
         clip: true;
 
-        // ==========================================
-        // VIEW 1: SEARCH & LAUNCHER VIEW
-        // ==========================================
+        // =========================================================
+        // VIEW 1: SPOTLIGHT SEARCH & LAUNCHER VIEW
+        // =========================================================
         search_view := VerticalLayout {
             visible: !root.in_settings_mode;
-            padding-left: 14px;
-            padding-right: 14px;
-            padding-top: 12px;
-            padding-bottom: 10px;
-            spacing: 8px;
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 14px;
+            padding-bottom: 12px;
+            spacing: 12px;
 
-            // 1. Top Header Bar (Native Window Drag Area)
-            header_bar := Rectangle {
-                height: 24px;
+            // 1. Top Spotlight Search Bar with integrated Header Drag Area
+            search_box := Rectangle {
+                height: 52px;
+                background: #1f2335;
+                border-radius: 12px;
+                border-width: 1.5px;
+                border-color: root.is_file_mode ? #2ac3de : (search_input.has-focus ? #7aa2f7 : #3b4261);
 
                 TouchArea {
+                    clicked => {
+                        search_input.focus();
+                    }
                     pointer-event(event) => {
                         if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
                             root.start_window_drag();
@@ -85,98 +92,27 @@ export component AppWindow inherits Window {
                 }
 
                 HorizontalLayout {
-                    HorizontalLayout {
-                        spacing: 6px;
-                        alignment: start;
-                        Text {
-                            text: root.mode_icon;
-                            color: root.is_file_mode ? #2ac3de : #7aa2f7;
-                            font-size: 14px;
-                            font-weight: 700;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            text: root.mode_title;
-                            color: root.is_file_mode ? #2ac3de : #7aa2f7;
-                            font-size: 12px;
-                            font-weight: 700;
-                            vertical-alignment: center;
-                        }
-                    }
+                    padding-left: 16px;
+                    padding-right: 14px;
+                    spacing: 12px;
 
-                    HorizontalLayout {
-                        alignment: end;
-                        spacing: 12px;
-
-                        Text {
-                            text: root.status_item_count;
-                            color: #565f89;
-                            font-size: 12px;
-                            font-weight: 600;
-                            vertical-alignment: center;
-                        }
-
-                        // Quick Settings Cog button
-                        settings_btn := Rectangle {
-                            width: 22px;
-                            height: 22px;
-                            border-radius: 4px;
-                            background: settings_touch.has-hover ? #24283b : transparent;
-
-                            settings_touch := TouchArea {
-                                clicked => {
-                                    root.open_config();
-                                }
-                            }
-
-                            Text {
-                                text: "⚙";
-                                color: settings_touch.has-hover ? #7aa2f7 : #565f89;
-                                font-size: 14px;
-                                vertical-alignment: center;
-                                horizontal-alignment: center;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2. Search Box
-            search_box := Rectangle {
-                height: 44px;
-                background: #24283b;
-                border-radius: 8px;
-                border-width: 1px;
-                border-color: root.is_file_mode ? #2ac3de : #414868;
-
-                TouchArea {
-                    clicked => {
-                        search_input.focus();
-                    }
-                }
-
-                HorizontalLayout {
-                    padding-left: 12px;
-                    padding-right: 12px;
-                    spacing: 10px;
-
-                    // Search lens / Folder glyph
+                    // Mode Icon (Lens for App, Folder for File, Calc for Math)
                     Text {
                         text: root.is_file_mode ? "󰉋" : "󰍉";
                         color: root.is_file_mode ? #2ac3de : #7dcfff;
-                        font-size: 18px;
+                        font-size: 20px;
                         font-weight: 700;
                         vertical-alignment: center;
                     }
 
-                    // Input Field with Stable Static Placeholder
+                    // Text Input Area with smooth placeholder
                     Rectangle {
                         horizontal-stretch: 1;
 
                         Text {
-                            text: root.is_file_mode ? "Type to search files (e.g. @f notes.pdf)..." : "Search apps, type @f for files, or 500*12...";
+                            text: root.is_file_mode ? "Search files & folders (e.g. notes.pdf, ~/Projects)..." : "Search apps, type @f for files, or 500*12...";
                             color: #565f89;
-                            font-size: 14px;
+                            font-size: 15px;
                             font-italic: true;
                             vertical-alignment: center;
                             visible: root.search_text == "";
@@ -186,8 +122,8 @@ export component AppWindow inherits Window {
                             text: root.search_text;
                             single-line: true;
                             font-size: 15px;
-                            color: #f0f6fc;
-                            selection-background-color: #3b4261;
+                            color: #ffffff;
+                            selection-background-color: #3d59a1;
                             selection-foreground-color: #ffffff;
                             vertical-alignment: center;
 
@@ -233,23 +169,75 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
+
+                    // Mode Badge Pill & Settings Quick Button
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: end;
+
+                        // Mode tag
+                        Rectangle {
+                            height: 24px;
+                            background: root.is_file_mode ? #163642 : #1c2541;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: root.is_file_mode ? #2ac3de : #7aa2f7;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                Text {
+                                    text: root.mode_title;
+                                    color: root.is_file_mode ? #2ac3de : #7aa2f7;
+                                    font-size: 10px;
+                                    font-weight: 800;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Settings Icon Button
+                        settings_btn := Rectangle {
+                            width: 26px;
+                            height: 26px;
+                            border-radius: 6px;
+                            background: settings_touch.has-hover ? #2e344f : #1a1b26;
+                            border-width: 1px;
+                            border-color: #2e344f;
+
+                            settings_touch := TouchArea {
+                                clicked => {
+                                    root.open_config();
+                                }
+                            }
+
+                            Text {
+                                text: "⚙";
+                                color: settings_touch.has-hover ? #7dcfff : #7aa2f7;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
                 }
             }
 
-            // 3. Item Results Direct Layout (High-Performance, Zero Focus Shift)
+            // 2. Item Results List (Direct Static Layout - Instant, No Lag)
             list_container := Rectangle {
                 vertical-stretch: 1;
                 clip: true;
 
+                // Empty State when no results found
                 Rectangle {
                     visible: !root.has_results;
                     VerticalLayout {
                         alignment: center;
-                        spacing: 8px;
+                        spacing: 10px;
                         Text {
                             text: "󰋔";
-                            font-size: 32px;
-                            color: #414868;
+                            font-size: 36px;
+                            color: #3b4261;
                             horizontal-alignment: center;
                         }
                         Text {
@@ -261,15 +249,18 @@ export component AppWindow inherits Window {
                     }
                 }
 
+                // Results List
                 VerticalLayout {
                     visible: root.has_results;
                     alignment: start;
-                    spacing: 2px;
+                    spacing: 4px;
 
                     for item[index] in root.items : item_row := Rectangle {
-                        height: 38px;
-                        background: (index == root.selected_index) ? #283457 : (item_touch.has-hover ? #1f2335 : transparent);
-                        border-radius: 6px;
+                        height: 42px;
+                        background: (index == root.selected_index) ? #242b48 : (item_touch.has-hover ? #1c2033 : transparent);
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: (index == root.selected_index) ? #3d59a1 : transparent;
 
                         item_touch := TouchArea {
                             clicked => {
@@ -279,49 +270,49 @@ export component AppWindow inherits Window {
                         }
 
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 12px;
+                            padding-left: 10px;
+                            padding-right: 14px;
                             spacing: 12px;
 
-                            // Left Side: Selection indicator + App Icon + Item Name
+                            // Left Side: Selection Indicator + Icon + Item Title
                             HorizontalLayout {
                                 spacing: 10px;
                                 alignment: start;
                                 horizontal-stretch: 1;
 
-                                // Active selection vertical pill
+                                // Selection Indicator Neon Pill
                                 HorizontalLayout {
                                     alignment: center;
                                     width: 3px;
                                     Rectangle {
                                         width: 3px;
-                                        height: 18px;
+                                        height: 20px;
                                         border-radius: 2px;
                                         background: (index == root.selected_index) ? #7dcfff : transparent;
                                     }
                                 }
 
-                                // Real System Icon Image
+                                // Native System App Icon (26x26)
                                 if (root.cfg_show_icons && item.has_icon) : HorizontalLayout {
                                     alignment: center;
-                                    width: 24px;
+                                    width: 26px;
                                     Image {
                                         source: item.icon;
-                                        width: 24px;
-                                        height: 24px;
+                                        width: 26px;
+                                        height: 26px;
                                         image-fit: contain;
                                     }
                                 }
 
-                                // Fallback icon when no image or icons disabled
+                                // High-Contrast Fallback Icon
                                 if (!root.cfg_show_icons || !item.has_icon) : Text {
                                     text: (item.item_type == "dir") ? "" : (item.item_type == "calc" ? "󰃬" : "󰀻");
-                                    color: (item.item_type == "calc") ? #9ece6a : (item.item_type == "dir" ? #7aa2f7 : #7dcfff);
+                                    color: (item.item_type == "calc") ? #9ece6a : (item.item_type == "dir" ? #2ac3de : #7aa2f7);
                                     font-size: 18px;
                                     vertical-alignment: center;
                                 }
 
-                                // Item Name
+                                // App Name with Bold Contrast
                                 Text {
                                     text: item.name;
                                     color: (index == root.selected_index) ? #ffffff : #c0caf5;
@@ -332,15 +323,15 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            // Right Side: Category Badge / Path preview
+                            // Right Side: Category Pill Badge
                             HorizontalLayout {
                                 alignment: end;
                                 Rectangle {
-                                    background: (index == root.selected_index) ? #1f2335 : #24283b;
-                                    border-radius: 4px;
+                                    background: (index == root.selected_index) ? #1c2033 : #1a1b26;
+                                    border-radius: 6px;
                                     height: 22px;
                                     border-width: 1px;
-                                    border-color: (index == root.selected_index) ? #3b4261 : #292e42;
+                                    border-color: (index == root.selected_index) ? #3d59a1 : #24283b;
 
                                     HorizontalLayout {
                                         padding-left: 8px;
@@ -363,100 +354,170 @@ export component AppWindow inherits Window {
             // Divider line above footer
             Rectangle {
                 height: 1px;
-                background: #292e42;
+                background: #24283b;
             }
 
-            // 4. Clean Footer Status Bar
+            // 3. Modern Keycap Footer Bar
             if root.cfg_show_status_bar : footer := Rectangle {
-                height: 26px;
+                height: 28px;
 
                 HorizontalLayout {
-                    alignment: center;
-                    spacing: 16px;
+                    alignment: space-between;
 
+                    // Left Shortcuts with Keycap Badges
                     HorizontalLayout {
-                        spacing: 4px;
-                        Text { text: "[Enter]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                        Text { text: "Open"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                        spacing: 12px;
+                        alignment: start;
+
+                        // [↵ Open]
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                background: #24283b;
+                                border-radius: 4px;
+                                height: 20px;
+                                border-width: 1px;
+                                border-color: #3b4261;
+                                HorizontalLayout {
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    Text { text: "↵"; color: #7aa2f7; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                }
+                            }
+                            Text { text: "Open"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                        }
+
+                        // [Alt+T Terminal]
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                background: #24283b;
+                                border-radius: 4px;
+                                height: 20px;
+                                border-width: 1px;
+                                border-color: #3b4261;
+                                HorizontalLayout {
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    Text { text: "Alt+T"; color: #7aa2f7; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                }
+                            }
+                            Text { text: "Terminal"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                        }
+
+                        // [Alt+C Copy]
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                background: #24283b;
+                                border-radius: 4px;
+                                height: 20px;
+                                border-width: 1px;
+                                border-color: #3b4261;
+                                HorizontalLayout {
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    Text { text: "Alt+C"; color: #7aa2f7; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                }
+                            }
+                            Text { text: "Copy Path"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                        }
+
+                        // [Ctrl+, Config]
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                background: #24283b;
+                                border-radius: 4px;
+                                height: 20px;
+                                border-width: 1px;
+                                border-color: #3b4261;
+                                HorizontalLayout {
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    Text { text: "Ctrl+,"; color: #7aa2f7; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                }
+                            }
+                            Text { text: "Settings"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                        }
                     }
 
-                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
-
+                    // Right Item Count & [Esc Quit]
                     HorizontalLayout {
-                        spacing: 4px;
-                        Text { text: "[Tab]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                        Text { text: "Complete"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                    }
+                        spacing: 12px;
+                        alignment: end;
 
-                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+                        Text {
+                            text: root.status_item_count;
+                            color: #565f89;
+                            font-size: 11px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
 
-                    HorizontalLayout {
-                        spacing: 4px;
-                        Text { text: "[Alt+T]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                        Text { text: "Terminal"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                    }
-
-                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
-
-                    HorizontalLayout {
-                        spacing: 4px;
-                        Text { text: "[Ctrl+,]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                        Text { text: "Settings"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                    }
-
-                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
-
-                    HorizontalLayout {
-                        spacing: 4px;
-                        Text { text: "[Esc]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                        Text { text: "Quit"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                background: #24283b;
+                                border-radius: 4px;
+                                height: 20px;
+                                border-width: 1px;
+                                border-color: #3b4261;
+                                HorizontalLayout {
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    Text { text: "Esc"; color: #f7768e; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                }
+                            }
+                            Text { text: "Quit"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                        }
                     }
                 }
             }
         }
 
-        // ==========================================
+        // =========================================================
         // VIEW 2: IN-APP GUI SETTINGS & CONFIG VIEW
-        // ==========================================
+        // =========================================================
         settings_view := VerticalLayout {
             visible: root.in_settings_mode;
             padding-left: 20px;
             padding-right: 20px;
-            padding-top: 14px;
-            padding-bottom: 14px;
-            spacing: 12px;
+            padding-top: 16px;
+            padding-bottom: 16px;
+            spacing: 14px;
 
             // 1. Settings Header Bar
             HorizontalLayout {
-                height: 28px;
+                height: 32px;
                 alignment: space-between;
 
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: 10px;
                     alignment: start;
                     Text {
                         text: "⚙";
                         color: #7aa2f7;
-                        font-size: 16px;
-                        font-weight: 700;
+                        font-size: 18px;
+                        font-weight: 800;
                         vertical-alignment: center;
                     }
                     Text {
-                        text: "VIEW LAUNCHER CONFIGURATION";
+                        text: "VIEW LAUNCHER PREFERENCES";
                         color: #ffffff;
-                        font-size: 13px;
-                        font-weight: 700;
+                        font-size: 14px;
+                        font-weight: 800;
                         vertical-alignment: center;
                     }
                 }
 
-                // Back button
+                // Back Button [Esc]
                 back_btn := Rectangle {
-                    height: 26px;
-                    background: back_touch.has-hover ? #3b4261 : #24283b;
+                    height: 28px;
+                    background: back_touch.has-hover ? #2e344f : #1f2335;
                     border-radius: 6px;
                     border-width: 1px;
-                    border-color: #414868;
+                    border-color: #3b4261;
 
                     back_touch := TouchArea {
                         clicked => {
@@ -465,21 +526,21 @@ export component AppWindow inherits Window {
                     }
 
                     HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        spacing: 4px;
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 6px;
                         Text {
                             text: "← Back [Esc]";
                             color: #c0caf5;
                             font-size: 12px;
-                            font-weight: 600;
+                            font-weight: 700;
                             vertical-alignment: center;
                         }
                     }
                 }
             }
 
-            Rectangle { height: 1px; background: #292e42; }
+            Rectangle { height: 1px; background: #24283b; }
 
             // 2. Settings Content Area
             VerticalLayout {
@@ -488,32 +549,35 @@ export component AppWindow inherits Window {
 
                 // Group 1: Appearance
                 Text {
-                    text: "APPEARANCE & DISPLAY";
+                    text: "APPEARANCE & VISUALS";
                     color: #7aa2f7;
                     font-size: 11px;
-                    font-weight: 700;
+                    font-weight: 800;
                 }
 
                 // Setting: Show App Icons
                 Rectangle {
-                    height: 38px;
-                    background: #24283b;
-                    border-radius: 6px;
+                    height: 40px;
+                    background: #1f2335;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: #2e344f;
                     HorizontalLayout {
                         padding-left: 14px;
                         padding-right: 14px;
                         alignment: space-between;
                         Text {
-                            text: "Show Native Application Icons";
+                            text: "Show Native High-Res Application Icons";
                             color: #c0caf5;
                             font-size: 13px;
+                            font-weight: 600;
                             vertical-alignment: center;
                         }
                         toggle_icon := Rectangle {
                             width: 64px;
                             height: 26px;
                             border-radius: 13px;
-                            background: root.cfg_show_icons ? #7aa2f7 : #414868;
+                            background: root.cfg_show_icons ? #7aa2f7 : #3b4261;
                             TouchArea {
                                 clicked => {
                                     root.cfg_show_icons = !root.cfg_show_icons;
@@ -521,9 +585,9 @@ export component AppWindow inherits Window {
                             }
                             Text {
                                 text: root.cfg_show_icons ? "ON" : "OFF";
-                                color: root.cfg_show_icons ? #1a1b26 : #a9b1d6;
+                                color: root.cfg_show_icons ? #16161e : #a9b1d6;
                                 font-size: 11px;
-                                font-weight: 700;
+                                font-weight: 800;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -533,24 +597,27 @@ export component AppWindow inherits Window {
 
                 // Setting: Show Status Bar
                 Rectangle {
-                    height: 38px;
-                    background: #24283b;
-                    border-radius: 6px;
+                    height: 40px;
+                    background: #1f2335;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: #2e344f;
                     HorizontalLayout {
                         padding-left: 14px;
                         padding-right: 14px;
                         alignment: space-between;
                         Text {
-                            text: "Show Bottom Keyboard Hints Bar";
+                            text: "Show Bottom Keyboard Shortcuts Bar";
                             color: #c0caf5;
                             font-size: 13px;
+                            font-weight: 600;
                             vertical-alignment: center;
                         }
                         toggle_bar := Rectangle {
                             width: 64px;
                             height: 26px;
                             border-radius: 13px;
-                            background: root.cfg_show_status_bar ? #7aa2f7 : #414868;
+                            background: root.cfg_show_status_bar ? #7aa2f7 : #3b4261;
                             TouchArea {
                                 clicked => {
                                     root.cfg_show_status_bar = !root.cfg_show_status_bar;
@@ -558,9 +625,9 @@ export component AppWindow inherits Window {
                             }
                             Text {
                                 text: root.cfg_show_status_bar ? "ON" : "OFF";
-                                color: root.cfg_show_status_bar ? #1a1b26 : #a9b1d6;
+                                color: root.cfg_show_status_bar ? #16161e : #a9b1d6;
                                 font-size: 11px;
-                                font-weight: 700;
+                                font-weight: 800;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -568,19 +635,21 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                // Group 2: Search Behavior
+                // Group 2: Search Engine
                 Text {
-                    text: "SEARCH & ENGINE";
+                    text: "SEARCH & PERFORMANCE";
                     color: #7aa2f7;
                     font-size: 11px;
-                    font-weight: 700;
+                    font-weight: 800;
                 }
 
                 // Setting: Match Full Path
                 Rectangle {
-                    height: 38px;
-                    background: #24283b;
-                    border-radius: 6px;
+                    height: 40px;
+                    background: #1f2335;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: #2e344f;
                     HorizontalLayout {
                         padding-left: 14px;
                         padding-right: 14px;
@@ -589,13 +658,14 @@ export component AppWindow inherits Window {
                             text: "Match Full File & Directory Paths";
                             color: #c0caf5;
                             font-size: 13px;
+                            font-weight: 600;
                             vertical-alignment: center;
                         }
                         toggle_path := Rectangle {
                             width: 64px;
                             height: 26px;
                             border-radius: 13px;
-                            background: root.cfg_enable_path_matching ? #2ac3de : #414868;
+                            background: root.cfg_enable_path_matching ? #2ac3de : #3b4261;
                             TouchArea {
                                 clicked => {
                                     root.cfg_enable_path_matching = !root.cfg_enable_path_matching;
@@ -603,9 +673,9 @@ export component AppWindow inherits Window {
                             }
                             Text {
                                 text: root.cfg_enable_path_matching ? "ON" : "OFF";
-                                color: root.cfg_enable_path_matching ? #1a1b26 : #a9b1d6;
+                                color: root.cfg_enable_path_matching ? #16161e : #a9b1d6;
                                 font-size: 11px;
-                                font-weight: 700;
+                                font-weight: 800;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -615,28 +685,31 @@ export component AppWindow inherits Window {
 
                 // Setting: Max Results Selector
                 Rectangle {
-                    height: 38px;
-                    background: #24283b;
-                    border-radius: 6px;
+                    height: 40px;
+                    background: #1f2335;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: #2e344f;
                     HorizontalLayout {
                         padding-left: 14px;
                         padding-right: 14px;
                         alignment: space-between;
                         Text {
-                            text: "Max Search Results Limit";
+                            text: "Max Visible Search Results";
                             color: #c0caf5;
                             font-size: 13px;
+                            font-weight: 600;
                             vertical-alignment: center;
                         }
                         HorizontalLayout {
                             spacing: 6px;
                             alignment: end;
 
-                            for num in [10, 15, 20, 30] : Rectangle {
-                                width: 34px;
-                                height: 24px;
-                                border-radius: 4px;
-                                background: (root.cfg_max_results == num) ? #7aa2f7 : #1f2335;
+                            for num in [6, 8, 10, 12] : Rectangle {
+                                width: 36px;
+                                height: 26px;
+                                border-radius: 6px;
+                                background: (root.cfg_max_results == num) ? #7aa2f7 : #16161e;
                                 border-width: 1px;
                                 border-color: (root.cfg_max_results == num) ? #7aa2f7 : #3b4261;
                                 TouchArea {
@@ -646,9 +719,9 @@ export component AppWindow inherits Window {
                                 }
                                 Text {
                                     text: "\{num}";
-                                    color: (root.cfg_max_results == num) ? #1a1b26 : #c0caf5;
-                                    font-size: 11px;
-                                    font-weight: 700;
+                                    color: (root.cfg_max_results == num) ? #16161e : #c0caf5;
+                                    font-size: 12px;
+                                    font-weight: 800;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                 }
@@ -658,29 +731,29 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // 3. Status notification text
+            // 3. Status Toast Notification
             if root.settings_status != "" : Text {
                 text: root.settings_status;
                 color: #9ece6a;
                 font-size: 12px;
-                font-weight: 600;
+                font-weight: 700;
                 horizontal-alignment: center;
             }
 
-            Rectangle { height: 1px; background: #292e42; }
+            Rectangle { height: 1px; background: #24283b; }
 
-            // 4. Bottom Action Buttons
+            // 4. Action Buttons
             HorizontalLayout {
-                height: 36px;
+                height: 38px;
                 spacing: 12px;
                 alignment: end;
 
                 // Button: Open Raw config.toml
                 raw_btn := Rectangle {
-                    background: raw_touch.has-hover ? #3b4261 : #24283b;
-                    border-radius: 6px;
+                    background: raw_touch.has-hover ? #2e344f : #1f2335;
+                    border-radius: 8px;
                     border-width: 1px;
-                    border-color: #414868;
+                    border-color: #3b4261;
 
                     raw_touch := TouchArea {
                         clicked => {
@@ -689,13 +762,13 @@ export component AppWindow inherits Window {
                     }
 
                     HorizontalLayout {
-                        padding-left: 14px;
-                        padding-right: 14px;
+                        padding-left: 16px;
+                        padding-right: 16px;
                         Text {
                             text: "📝 Edit config.toml";
                             color: #c0caf5;
                             font-size: 12px;
-                            font-weight: 600;
+                            font-weight: 700;
                             vertical-alignment: center;
                         }
                     }
@@ -703,8 +776,8 @@ export component AppWindow inherits Window {
 
                 // Button: Save & Apply
                 save_btn := Rectangle {
-                    background: save_touch.has-hover ? #89b4fa : #7aa2f7;
-                    border-radius: 6px;
+                    background: save_touch.has-hover ? #9ece6a : #7aa2f7;
+                    border-radius: 8px;
 
                     save_touch := TouchArea {
                         clicked => {
@@ -719,13 +792,13 @@ export component AppWindow inherits Window {
                     }
 
                     HorizontalLayout {
-                        padding-left: 18px;
-                        padding-right: 18px;
+                        padding-left: 20px;
+                        padding-right: 20px;
                         Text {
                             text: "💾 Save & Apply Changes";
-                            color: #1a1b26;
+                            color: #16161e;
                             font-size: 13px;
-                            font-weight: 700;
+                            font-weight: 800;
                             vertical-alignment: center;
                         }
                     }
