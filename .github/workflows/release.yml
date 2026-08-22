@@ -114,22 +114,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
-          name: Release ${{ steps.vars.outputs.tag }}
+          name: view-launcher ${{ steps.vars.outputs.tag }}
           files: release-assets/*
           generate_release_notes: true
           draft: false
           prerelease: false
-          body: |
-            ### 🚀 View Launcher ${{ steps.vars.outputs.tag }}
-
-            A minimalist, high-performance terminal TUI app & file launcher in Rust (<1ms).
-
-            #### 📦 Tải về các file cài đặt:
-            - **Windows (Khuyên dùng):**
-              - 🚀 **`view-launcher-setup.exe`**: Bộ cài đặt tự động (Tự cấu hình PATH và phím tắt `Ctrl+Alt+Space` khởi động cùng Windows).
-              - ⚡ **`view-launcher.exe`**: File thực thi độc lập (Portable binary).
-              - 📦 **`view-launcher-windows-x86_64.zip`**: File nén chứa binary và script cài đặt `install.ps1`.
-            - **Ubuntu / Debian / Linux:**
-              - 🐧 **`view-launcher_0.2.0_amd64.deb`**: Gói cài đặt Debian/Ubuntu (`sudo dpkg -i view-launcher_*.deb`).
-              - 📦 **`view-launcher-linux-x86_64.tar.gz`**: File nén nhị phân cho Linux x86_64.
-              - ⚡ **`view-launcher-linux-x86_64`**: File thực thi nhị phân độc lập.
