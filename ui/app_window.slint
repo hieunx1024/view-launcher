@@ -12,14 +12,13 @@ export component AppWindow inherits Window {
     no-frame: true;
     background: transparent;
     width: 680px;
-    height: 490px;
+    height: 520px;
 
     in-out property <string> search_text: "";
     in-out property <int> selected_index: 0;
     in property <[LauncherItemData]> items: [];
     in property <bool> has_results: true;
     in property <string> mode_title: "APPLICATIONS";
-    in property <string> mode_icon: "󰀻";
     in property <bool> is_file_mode: false;
     in property <string> status_item_count: "0 apps";
 
@@ -57,7 +56,7 @@ export component AppWindow inherits Window {
         height: 100%;
         background: #16161e;
         border-radius: 16px;
-        border-width: 1px;
+        border-width: 1.5px;
         border-color: #2e344f;
         clip: true;
 
@@ -72,11 +71,11 @@ export component AppWindow inherits Window {
             padding-bottom: 12px;
             spacing: 12px;
 
-            // 1. Top Spotlight Search Bar with integrated Header Drag Area
+            // 1. Search Box with Integrated Drag Area
             search_box := Rectangle {
-                height: 52px;
+                height: 50px;
                 background: #1f2335;
-                border-radius: 12px;
+                border-radius: 10px;
                 border-width: 1.5px;
                 border-color: root.is_file_mode ? #2ac3de : (search_input.has-focus ? #7aa2f7 : #3b4261);
 
@@ -92,27 +91,30 @@ export component AppWindow inherits Window {
                 }
 
                 HorizontalLayout {
-                    padding-left: 16px;
-                    padding-right: 14px;
+                    padding-left: 14px;
+                    padding-right: 12px;
                     spacing: 12px;
 
-                    // Mode Icon (Lens for App, Folder for File, Calc for Math)
-                    Text {
-                        text: root.is_file_mode ? "󰉋" : "󰍉";
-                        color: root.is_file_mode ? #2ac3de : #7dcfff;
-                        font-size: 20px;
-                        font-weight: 700;
-                        vertical-alignment: center;
+                    // Search Prefix Symbol
+                    HorizontalLayout {
+                        alignment: center;
+                        width: 24px;
+                        Text {
+                            text: root.is_file_mode ? "📂" : "🔍";
+                            font-size: 16px;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
+                        }
                     }
 
-                    // Text Input Area with smooth placeholder
+                    // Text Input Area
                     Rectangle {
                         horizontal-stretch: 1;
 
                         Text {
-                            text: root.is_file_mode ? "Search files & folders (e.g. notes.pdf, ~/Projects)..." : "Search apps, type @f for files, or 500*12...";
+                            text: root.is_file_mode ? "Type to search files (e.g. notes.pdf, ~/Projects)..." : "Search apps, type @f for files, or 500*12...";
                             color: #565f89;
-                            font-size: 15px;
+                            font-size: 14px;
                             font-italic: true;
                             vertical-alignment: center;
                             visible: root.search_text == "";
@@ -170,16 +172,16 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    // Mode Badge Pill & Settings Quick Button
+                    // Mode Badge Pill & Settings Button
                     HorizontalLayout {
                         spacing: 8px;
                         alignment: end;
 
-                        // Mode tag
+                        // Mode Tag Pill
                         Rectangle {
                             height: 24px;
                             background: root.is_file_mode ? #163642 : #1c2541;
-                            border-radius: 6px;
+                            border-radius: 5px;
                             border-width: 1px;
                             border-color: root.is_file_mode ? #2ac3de : #7aa2f7;
 
@@ -196,14 +198,13 @@ export component AppWindow inherits Window {
                             }
                         }
 
-                        // Settings Icon Button
+                        // Settings Button with Crisp Icon + Tooltip
                         settings_btn := Rectangle {
-                            width: 26px;
-                            height: 26px;
-                            border-radius: 6px;
+                            height: 24px;
                             background: settings_touch.has-hover ? #2e344f : #1a1b26;
+                            border-radius: 5px;
                             border-width: 1px;
-                            border-color: #2e344f;
+                            border-color: #3b4261;
 
                             settings_touch := TouchArea {
                                 clicked => {
@@ -211,33 +212,37 @@ export component AppWindow inherits Window {
                                 }
                             }
 
-                            Text {
-                                text: "⚙";
-                                color: settings_touch.has-hover ? #7dcfff : #7aa2f7;
-                                font-size: 14px;
-                                vertical-alignment: center;
-                                horizontal-alignment: center;
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 4px;
+                                Text {
+                                    text: "⚙ Config";
+                                    color: settings_touch.has-hover ? #7dcfff : #a9b1d6;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // 2. Item Results List (Direct Static Layout - Instant, No Lag)
+            // 2. Item Results List (Direct Static Layout - 100% Vertically Aligned)
             list_container := Rectangle {
                 vertical-stretch: 1;
                 clip: true;
 
-                // Empty State when no results found
+                // Empty State
                 Rectangle {
                     visible: !root.has_results;
                     VerticalLayout {
                         alignment: center;
                         spacing: 10px;
                         Text {
-                            text: "󰋔";
-                            font-size: 36px;
-                            color: #3b4261;
+                            text: "🔍";
+                            font-size: 32px;
                             horizontal-alignment: center;
                         }
                         Text {
@@ -249,7 +254,7 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                // Results List
+                // Results Column
                 VerticalLayout {
                     visible: root.has_results;
                     alignment: start;
@@ -270,60 +275,67 @@ export component AppWindow inherits Window {
                         }
 
                         HorizontalLayout {
-                            padding-left: 10px;
+                            padding-left: 8px;
                             padding-right: 14px;
-                            spacing: 12px;
+                            spacing: 10px;
 
-                            // Left Side: Selection Indicator + Icon + Item Title
+                            // Neon Selection Indicator Pill
                             HorizontalLayout {
-                                spacing: 10px;
-                                alignment: start;
-                                horizontal-stretch: 1;
-
-                                // Selection Indicator Neon Pill
-                                HorizontalLayout {
-                                    alignment: center;
+                                alignment: center;
+                                width: 3px;
+                                Rectangle {
                                     width: 3px;
-                                    Rectangle {
-                                        width: 3px;
-                                        height: 20px;
-                                        border-radius: 2px;
-                                        background: (index == root.selected_index) ? #7dcfff : transparent;
-                                    }
-                                }
-
-                                // Native System App Icon (26x26)
-                                if (root.cfg_show_icons && item.has_icon) : HorizontalLayout {
-                                    alignment: center;
-                                    width: 26px;
-                                    Image {
-                                        source: item.icon;
-                                        width: 26px;
-                                        height: 26px;
-                                        image-fit: contain;
-                                    }
-                                }
-
-                                // High-Contrast Fallback Icon
-                                if (!root.cfg_show_icons || !item.has_icon) : Text {
-                                    text: (item.item_type == "dir") ? "" : (item.item_type == "calc" ? "󰃬" : "󰀻");
-                                    color: (item.item_type == "calc") ? #9ece6a : (item.item_type == "dir" ? #2ac3de : #7aa2f7);
-                                    font-size: 18px;
-                                    vertical-alignment: center;
-                                }
-
-                                // App Name with Bold Contrast
-                                Text {
-                                    text: item.name;
-                                    color: (index == root.selected_index) ? #ffffff : #c0caf5;
-                                    font-weight: (index == root.selected_index) ? 700 : 500;
-                                    font-size: 14px;
-                                    vertical-alignment: center;
-                                    overflow: elide;
+                                    height: 20px;
+                                    border-radius: 2px;
+                                    background: (index == root.selected_index) ? #7dcfff : transparent;
                                 }
                             }
 
-                            // Right Side: Category Pill Badge
+                            // Dedicated Fixed-Width Icon Container (Guarantees perfect vertical alignment)
+                            HorizontalLayout {
+                                alignment: center;
+                                width: 30px;
+
+                                // Real native app icon
+                                if (root.cfg_show_icons && item.has_icon) : Image {
+                                    source: item.icon;
+                                    width: 26px;
+                                    height: 26px;
+                                    image-fit: contain;
+                                }
+
+                                // Fallback stylish icon badge when no system icon exists
+                                if (!root.cfg_show_icons || !item.has_icon) : Rectangle {
+                                    width: 26px;
+                                    height: 26px;
+                                    border-radius: 6px;
+                                    background: (item.item_type == "calc") ? #1e3a2f : ((item.item_type == "dir") ? #1a2b4c : #22273d);
+                                    border-width: 1px;
+                                    border-color: (item.item_type == "calc") ? #9ece6a : ((item.item_type == "dir") ? #2ac3de : #3b4261);
+
+                                    Text {
+                                        text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "📁" : "◆");
+                                        color: (item.item_type == "calc") ? #9ece6a : ((item.item_type == "dir") ? #2ac3de : #7aa2f7);
+                                        font-size: 13px;
+                                        font-weight: 800;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // App Name
+                            Text {
+                                text: item.name;
+                                color: (index == root.selected_index) ? #ffffff : #c0caf5;
+                                font-weight: (index == root.selected_index) ? 700 : 500;
+                                font-size: 14px;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+
+                            // Category Badge Pill
                             HorizontalLayout {
                                 alignment: end;
                                 Rectangle {
@@ -351,27 +363,27 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // Divider line above footer
+            // Divider Line
             Rectangle {
                 height: 1px;
                 background: #24283b;
             }
 
-            // 3. Modern Keycap Footer Bar
+            // 3. Crisp Keyboard Shortcut Footer Bar
             if root.cfg_show_status_bar : footer := Rectangle {
-                height: 28px;
+                height: 26px;
 
                 HorizontalLayout {
                     alignment: space-between;
 
-                    // Left Shortcuts with Keycap Badges
+                    // Left Shortcut Badges
                     HorizontalLayout {
                         spacing: 12px;
                         alignment: start;
 
                         // [↵ Open]
                         HorizontalLayout {
-                            spacing: 4px;
+                            spacing: 5px;
                             Rectangle {
                                 background: #24283b;
                                 border-radius: 4px;
@@ -381,7 +393,7 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     padding-left: 6px;
                                     padding-right: 6px;
-                                    Text { text: "↵"; color: #7aa2f7; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                    Text { text: "↵"; color: #7aa2f7; font-weight: 800; font-size: 12px; vertical-alignment: center; }
                                 }
                             }
                             Text { text: "Open"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
@@ -389,7 +401,7 @@ export component AppWindow inherits Window {
 
                         // [Alt+T Terminal]
                         HorizontalLayout {
-                            spacing: 4px;
+                            spacing: 5px;
                             Rectangle {
                                 background: #24283b;
                                 border-radius: 4px;
@@ -407,7 +419,7 @@ export component AppWindow inherits Window {
 
                         // [Alt+C Copy]
                         HorizontalLayout {
-                            spacing: 4px;
+                            spacing: 5px;
                             Rectangle {
                                 background: #24283b;
                                 border-radius: 4px;
@@ -423,9 +435,9 @@ export component AppWindow inherits Window {
                             Text { text: "Copy Path"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                         }
 
-                        // [Ctrl+, Config]
+                        // [Ctrl+, Settings]
                         HorizontalLayout {
-                            spacing: 4px;
+                            spacing: 5px;
                             Rectangle {
                                 background: #24283b;
                                 border-radius: 4px;
@@ -442,7 +454,7 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    // Right Item Count & [Esc Quit]
+                    // Right Item Count & [Esc Close]
                     HorizontalLayout {
                         spacing: 12px;
                         alignment: end;
@@ -456,7 +468,7 @@ export component AppWindow inherits Window {
                         }
 
                         HorizontalLayout {
-                            spacing: 4px;
+                            spacing: 5px;
                             Rectangle {
                                 background: #24283b;
                                 border-radius: 4px;
@@ -469,7 +481,7 @@ export component AppWindow inherits Window {
                                     Text { text: "Esc"; color: #f7768e; font-weight: 800; font-size: 11px; vertical-alignment: center; }
                                 }
                             }
-                            Text { text: "Quit"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                            Text { text: "Close"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                         }
                     }
                 }
@@ -493,12 +505,12 @@ export component AppWindow inherits Window {
                 alignment: space-between;
 
                 HorizontalLayout {
-                    spacing: 10px;
+                    spacing: 8px;
                     alignment: start;
                     Text {
                         text: "⚙";
                         color: #7aa2f7;
-                        font-size: 18px;
+                        font-size: 16px;
                         font-weight: 800;
                         vertical-alignment: center;
                     }
@@ -567,7 +579,7 @@ export component AppWindow inherits Window {
                         padding-right: 14px;
                         alignment: space-between;
                         Text {
-                            text: "Show Native High-Res Application Icons";
+                            text: "Show Native Application Icons";
                             color: #c0caf5;
                             font-size: 13px;
                             font-weight: 600;
@@ -705,7 +717,7 @@ export component AppWindow inherits Window {
                             spacing: 6px;
                             alignment: end;
 
-                            for num in [6, 8, 10, 12] : Rectangle {
+                            for num in [6, 8, 10] : Rectangle {
                                 width: 36px;
                                 height: 26px;
                                 border-radius: 6px;

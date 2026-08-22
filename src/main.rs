@@ -105,12 +105,10 @@ fn populate_items(
     ui.set_is_file_mode(is_file_mode);
     ui.set_has_results(count > 0);
     if is_file_mode {
-        ui.set_mode_icon("󰉋".into());
         ui.set_mode_title("FILE SEARCH".into());
         ui.set_status_item_count(format!("{} files", count).into());
     } else {
-        ui.set_mode_icon("󰀻".into());
-        ui.set_mode_title("VIEW LAUNCHER".into());
+        ui.set_mode_title("APPLICATIONS".into());
         ui.set_status_item_count(format!("{} apps", count).into());
     }
 
