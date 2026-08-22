@@ -4,131 +4,121 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Tag name for release (e.g. v0.2.0)'
-        required: false
-        default: 'v0.2.0'
 
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build-linux:
-    name: Build Linux (.deb & .tar.gz)
+    name: Build Linux Packages
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux GUI Dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libwayland-dev
+          sudo apt-get install -y libxkbcommon-dev libfontconfig1-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libx11-dev
 
-      - name: Install cargo-deb
-        run: cargo install cargo-deb
-
-      - name: Build Release Binary
-        run: cargo build --release
-
-      - name: Build Debian Package (.deb)
-        run: cargo deb --no-build
-
-      - name: Package Linux Artifacts
-        run: |
-          mkdir -p dist
-          cp target/debian/*.deb dist/
-          cp target/release/view-launcher dist/view-launcher-linux-x86_64
-          tar -czvf dist/view-launcher-linux-x86_64.tar.gz -C target/release view-launcher
-
-      - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-dist
-          path: dist/*
-
-  build-windows:
-    name: Build Windows (.exe, .zip & setup)
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
+      - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Release Binary
+      - name: Run unit tests
+        run: cargo test --verbose
+
+      - name: Build release binary
         run: cargo build --release
+
+      - name: Create tarball
+        run: |
+          tar -czvf view-launcher-linux-x86_64.tar.gz -C target/release view-launcher
+
+      - name: Build Debian package
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p target/deb-pkg/usr/bin target/deb-pkg/usr/share/applications target/deb-pkg/usr/share/pixmaps target/deb-pkg/usr/share/icons/hicolor/scalable/apps target/deb-pkg/DEBIAN
+          cp target/release/view-launcher target/deb-pkg/usr/bin/
+          chmod 755 target/deb-pkg/usr/bin/view-launcher
+          cp assets/view-launcher.desktop target/deb-pkg/usr/share/applications/
+          cp assets/view-launcher.png target/deb-pkg/usr/share/pixmaps/
+          cp assets/view-launcher.svg target/deb-pkg/usr/share/pixmaps/
+          cp assets/view-launcher.svg target/deb-pkg/usr/share/icons/hicolor/scalable/apps/
+          chmod 755 target/deb-pkg/DEBIAN/postinst
+          dpkg-deb --build target/deb-pkg "view-launcher_${VERSION}_amd64.deb"
+
+      - name: Upload Linux assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release-assets
+          path: |
+            view-launcher-linux-x86_64.tar.gz
+            view-launcher_*_amd64.deb
+
+  build-windows:
+    name: Build Windows Packages
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run unit tests
+        run: cargo test --verbose
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Create portable zip
+        run: |
+          Compress-Archive -Path target/release/view-launcher.exe, assets/view-launcher.ico, README.md -DestinationPath view-launcher-windows-x86_64.zip
 
       - name: Compile Inno Setup Installer
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\windows\setup.iss
+          iscc installer\windows\setup.iss
 
-      - name: Package Windows Artifacts
-        shell: pwsh
+      - name: Copy installer
         run: |
-          mkdir dist
-          Copy-Item "target\release\view-launcher.exe" -Destination "dist\view-launcher.exe"
-          Copy-Item "assets\view-launcher.ico" -Destination "dist\view-launcher.ico"
-          Compress-Archive -Path target\release\view-launcher.exe, assets\view-launcher.ico, README.md, installer\windows\install.ps1 -DestinationPath dist\view-launcher-windows-x86_64.zip
-          if (Test-Path "installer\windows\Output\view-launcher-setup.exe") {
-            Copy-Item "installer\windows\Output\view-launcher-setup.exe" -Destination "dist\view-launcher-setup.exe"
-          }
+          Copy-Item -Path "installer\windows\Output\view-launcher-setup.exe" -Destination "view-launcher-setup.exe"
 
-      - name: Upload Windows Artifacts
+      - name: Upload Windows assets
         uses: actions/upload-artifact@v4
         with:
-          name: windows-dist
-          path: dist/*
+          name: windows-release-assets
+          path: |
+            view-launcher-setup.exe
+            view-launcher-windows-x86_64.zip
 
-  publish-release:
+  publish:
     name: Publish GitHub Release
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Linux Artifacts
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux-dist
+          name: linux-release-assets
           path: release-assets
 
-      - name: Download Windows Artifacts
+      - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-dist
+          name: windows-release-assets
           path: release-assets
-
-      - name: Determine Tag
-        id: vars
-        run: |
-          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: view-launcher ${{ steps.vars.outputs.tag }}
-          files: release-assets/*
+          files: |
+            release-assets/*
           generate_release_notes: true
           draft: false
           prerelease: false
-          body: |
-            A minimalist, high-performance application and file launcher for Linux and Windows (<1ms).
-
-            ### Assets
-            - `view-launcher-setup.exe`: Windows installer with desktop shortcuts and background hotkey
-            - `view-launcher_0.2.0-1_amd64.deb`: Debian/Ubuntu package with desktop icon
-            - `view-launcher-windows-x86_64.zip`: Windows portable archive
-            - `view-launcher-linux-x86_64.tar.gz`: Linux portable archive

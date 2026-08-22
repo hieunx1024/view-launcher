@@ -2,39 +2,79 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  test-linux:
+    name: Test & Build (Linux)
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux GUI Dependencies
-        if: runner.os == 'Linux'
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libwayland-dev
+          sudo apt-get install -y libxkbcommon-dev libfontconfig1-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libx11-dev
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Cargo Check
-        run: cargo check --all-targets
-
-      - name: Run Tests
+      - name: Run unit tests
         run: cargo test --verbose
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Build Debian package
+        run: |
+          mkdir -p target/deb-pkg/usr/bin target/deb-pkg/usr/share/applications target/deb-pkg/usr/share/pixmaps target/deb-pkg/usr/share/icons/hicolor/scalable/apps target/deb-pkg/DEBIAN
+          cp target/release/view-launcher target/deb-pkg/usr/bin/
+          chmod 755 target/deb-pkg/usr/bin/view-launcher
+          cp assets/view-launcher.desktop target/deb-pkg/usr/share/applications/
+          cp assets/view-launcher.png target/deb-pkg/usr/share/pixmaps/
+          cp assets/view-launcher.svg target/deb-pkg/usr/share/pixmaps/
+          cp assets/view-launcher.svg target/deb-pkg/usr/share/icons/hicolor/scalable/apps/
+          chmod 755 target/deb-pkg/DEBIAN/postinst
+          dpkg-deb --build target/deb-pkg target/view-launcher_0.2.0_amd64.deb
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-package
+          path: |
+            target/release/view-launcher
+            target/view-launcher_0.2.0_amd64.deb
+
+  test-windows:
+    name: Test & Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run unit tests
+        run: cargo test --verbose
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Compile Inno Setup Installer
+        run: |
+          iscc installer\windows\setup.iss
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: |
+            target/release/view-launcher.exe
+            installer/windows/Output/view-launcher-setup.exe

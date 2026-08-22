@@ -1,146 +1,137 @@
 # view-launcher
 
-A minimalist, lightweight application and file launcher for Linux and Windows, built with Rust and Ratatui.
-
-![view-launcher](assets/screenshot.png)
-
-[English](#english) | [Vietnamese](#vietnamese)
+A lightweight, high-performance desktop application and file launcher for Linux and Windows, written in Rust and powered by Slint with hardware-accelerated OpenGL rendering.
 
 ---
 
-## English
+## Overview
 
-### Features
+`view-launcher` provides an instant search overlay for applications, local files, folders, and inline mathematical calculations. It is designed to replace heavy desktop application menus with an immediate, keyboard-driven interface.
 
-- **Fast startup:** Sub-millisecond response time with asynchronous background filesystem scanning.
-- **Pure App Launcher by default:** Instant, clutter-free application launcher.
-- **Dedicated File Search Mode (`@f` / `@file`):** Type `@f <keyword>` or browse directly with `/` and `~/` to search files and folders.
-- **Fuzzy search:** Interactive fuzzy matching with matched character highlighting.
-- **Vietnamese accent normalization:** Matches unaccented input against accented filenames (e.g. `tai lieu` matches `Tài liệu`).
-- **Nerd Font integration:** Comprehensive application and filetype icon mapping.
-- **Inline calculator:** Computes basic arithmetic expressions directly in the search bar and copies results to clipboard on Enter.
-- **Usage-based ranking:** Frequently and recently launched items are prioritized.
-- **Text editing & navigation:** Full cursor movement (`Left`, `Right`, `Home`, `End`), word deletion (`Ctrl+W`), line clearing (`Ctrl+U`), and Vim-style navigation (`Ctrl+J`, `Ctrl+K`).
-- **Configurable:** Custom search directories, depths, exclusions, pinned apps, and custom commands via `config.toml`.
-- **Single-instance toggle:** Uses Unix domain sockets on Linux and named pipes on Windows to toggle the active window.
+---
 
-### Installation
+## Features
 
-#### Ubuntu / Debian (`.deb`)
+- **Sub-millisecond startup**: Zero-cost abstraction in Rust with pre-indexed application caches and O(1) icon lookups.
+- **Application Search**: Automatic indexing of system `.desktop` entries on Linux and Start Menu shortcuts (`.lnk`) on Windows.
+- **Dedicated File Search Mode (`@f`)**: Prefix queries with `@f` to perform fast multi-threaded file and folder searches.
+- **Interactive Directory Navigation**: Press `Tab` on any folder result to browse into that folder directly within the search bar.
+- **Inline Calculator & Unit Evaluation**: Direct evaluation of arithmetic expressions (`500 * 12`), hexadecimal (`0xFF`), and binary (`0b1010`) with automatic clipboard copy on `Enter`.
+- **Vietnamese Accent Normalization**: Matches unaccented input against accented filenames and application names (e.g. `tai lieu` matches `Tài liệu`).
+- **Hardware-Accelerated UI**: Rendered via Slint and OpenGL (FemtoVG) for per-pixel transparency, antialiased rounded corners, and native HiDPI scaling.
+- **In-App Preferences Panel (`Ctrl + ,`)**: Graphical settings menu to configure native icons, shortcut hints, path matching, visible result limits, and system autostart.
+- **Single-Instance Daemon**: Uses Unix domain sockets on Linux and local TCP loopback on Windows to toggle the active window in less than 5ms.
 
-Download the latest `.deb` package from [Releases](https://github.com/hieunx1024/view-launcher/releases):
+---
+
+## Installation
+
+### Linux (Ubuntu / Debian)
+
+Download the latest `.deb` package from GitHub Releases:
 
 ```bash
-sudo dpkg -i view-launcher_*_amd64.deb
+sudo dpkg -i view-launcher_0.2.0_amd64.deb
 ```
 
-#### Windows
+The package automatically installs the desktop entry, system icons, and registers the global hotkey (`Ctrl + Alt + Space`) on GNOME desktop environments.
 
-Download `view-launcher-setup.exe` or `view-launcher-windows-x86_64.zip` from [Releases](https://github.com/hieunx1024/view-launcher/releases). The installer adds the binary to your `PATH` and registers the `Ctrl + Alt + Space` startup shortcut.
+### Windows
 
-#### Arch Linux (AUR)
+1. Download `view-launcher-setup.exe` from GitHub Releases.
+2. Run the installer to install the application, add it to your user `PATH`, and register the global shortcut.
+3. Alternatively, download the portable `view-launcher-windows-x86_64.zip` archive and run `view-launcher.exe` directly.
+
+---
+
+## Building from Source
+
+### Prerequisites
+
+- **Rust**: Rust 1.80+ (Edition 2024 or 2021)
+- **Linux Build Dependencies**:
+  ```bash
+  sudo apt-get install -y libxkbcommon-dev libfontconfig1-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libx11-dev
+  ```
+
+### Build Commands
 
 ```bash
-yay -S view-launcher-git
-```
-
-#### Build from Source
-
-```bash
+# Clone the repository
 git clone https://github.com/hieunx1024/view-launcher.git
 cd view-launcher
+
+# Run tests
+cargo test
+
+# Build optimized release binary
 cargo build --release
 ```
 
-Binary output: `target/release/view-launcher` (or `view-launcher.exe` on Windows).
+The compiled binary will be located at `target/release/view-launcher` (or `target/release/view-launcher.exe` on Windows).
 
-### Keybindings
+---
 
-| Key | Action |
-| --- | --- |
-| `Enter` | Launch application / Open file / Copy math result |
-| `Shift+Enter` / `Alt+T` | Open containing directory in Terminal |
-| `Alt+C` | Copy file path or calculation result to clipboard |
-| `Tab` | Autocomplete directory path or application name |
-| `Ctrl+J` / `Down` / `Ctrl+N` | Move selection down |
-| `Ctrl+K` / `Up` / `Ctrl+P` | Move selection up |
-| `PageDown` / `Ctrl+D` | Scroll down 5 items |
-| `PageUp` | Scroll up 5 items |
-| `Left` / `Right` | Move cursor |
-| `Home` (`Ctrl+A`) / `End` (`Ctrl+E`) | Move cursor to start / end |
-| `Ctrl+W` / `Alt+Backspace` | Delete word backward |
-| `Ctrl+U` | Clear search input |
-| `Esc` / `Ctrl+C` | Exit |
+## Keyboard Shortcuts
 
-### Configuration
+| Shortcut | Context | Action |
+| :--- | :--- | :--- |
+| `Ctrl + Alt + Space` | Global Desktop | Toggle launcher window |
+| `Down` / `Up` | Search List | Navigate through search results |
+| `Enter` | Search List | Launch selected application, open file, or copy calculation |
+| `Tab` | File Search Mode | Enter selected directory in search path |
+| `Backspace` | Search Bar | Delete character; if at root of directory, moves to parent |
+| `Alt + T` | Search List | Open containing directory in terminal |
+| `Alt + C` | Search List | Copy file path or calculation result to clipboard |
+| `Ctrl + ,` | Main Window | Open in-app preferences panel |
+| `Esc` | Main Window | Close settings panel or hide launcher window |
 
-Configuration files are located at:
-- **Linux:** `~/.config/view-launcher/config.toml`
-- **Windows:** `%APPDATA%\view-launcher\config.toml`
+---
 
-Example `config.toml`:
+## Configuration
+
+Configuration is saved in standard platform directories:
+- **Linux**: `~/.config/view-launcher/config.toml`
+- **Windows**: `%APPDATA%\view-launcher\config.toml`
+
+### Example `config.toml`
 
 ```toml
+[general]
+autostart = false
+
 [theme]
-query_color = "cyan"
-selection_bg = "#2d3748"
-selection_fg = "white"
-highlight_color = "#f6e05e"
+query_color = "#7aa2f7"
+selection_bg = "#262f4d"
+selection_fg = "#ffffff"
+border_color = "#3d59a1"
+highlight_color = "#7dcfff"
 show_icons = true
 show_status_bar = true
 
 [search]
-paths = [
-    { path = "~", max_depth = 2 },
-    { path = "~/Projects", max_depth = 4 },
-    { path = "~/Documents", max_depth = 3 },
-]
-ignored_dirs = [".git", "node_modules", "target", "build", ".venv"]
-ignored_extensions = [".tmp", ".o", ".lock", ".log"]
+max_results = 7
+max_depth = 2
 enable_path_matching = true
-disable_ime = true
+ignored_dirs = [".git", "node_modules", "target", "build", ".venv", "dist"]
+ignored_extensions = [".tmp", ".o", ".lock", ".log"]
+
+[[search.paths]]
+path = "~"
+depth = 2
+
+[[search.paths]]
+path = "~/Projects"
+depth = 3
 
 [apps]
-pinned = ["Google Chrome", "Visual Studio Code", "Terminal"]
-hidden = ["Avahi SSH Server", "UXTerm"]
-
-[[apps.custom]]
-name = "Lock Screen"
-exec = "swaylock -c 000000"
-terminal = false
-
-[[apps.custom]]
-name = "Neovim Projects"
-exec = "nvim ~/Projects"
-terminal = true
+pinned = ["Firefox", "Visual Studio Code", "Terminal"]
+hidden = ["Help", "Software Updater"]
+extra_desktop_paths = []
 ```
 
 ---
 
-## Vietnamese
+## License
 
-Trình khởi chạy ứng dụng và tìm kiếm tệp tin tối giản, tốc độ cao cho Linux và Windows, viết bằng Rust.
-
-### Tính năng chính
-
-- **Tốc độ cao:** Quét tệp ngầm bất đồng bộ, phản hồi dưới 1ms.
-- **Mặc định tìm Ứng dụng sạch sẽ:** Mở phần mềm tức thì, không bị lẫn tệp tin rác.
-- **Chế độ tìm File chuyên biệt (`@f` / `@file`):** Gõ `@f <từ khóa>` hoặc đường dẫn `/`, `~/` để tìm và duyệt thư mục, tệp tin.
-- **Tìm kiếm mờ (Fuzzy Search):** Tự động tô màu các ký tự so khớp.
-- **Chuẩn hóa tiếng Việt:** Tìm kiếm không dấu tự động (ví dụ: `tai lieu` tìm `Tài liệu`).
-- **Hỗ trợ Nerd Font & Icon ứng dụng:** Nhận diện chính xác icon và phân loại màu sắc cho từng phần mềm trên máy.
-- **Máy tính nhanh:** Nhập biểu thức toán học trực tiếp trong thanh tìm kiếm, nhấn `Enter` để copy kết quả.
-- **Xếp hạng theo tần suất:** Ưu tiên hiển thị các ứng dụng và tệp tin mở thường xuyên.
-- **Điều hướng con trỏ:** Hỗ trợ phím di chuyển con trỏ, xóa từ (`Ctrl+W`), xóa dòng (`Ctrl+U`), phím tắt Vim (`Ctrl+J`, `Ctrl+K`).
-- **Cấu hình linh hoạt:** Tùy biến thư mục quét, độ sâu, ứng dụng ghim/ẩn và lệnh tùy chỉnh qua `config.toml`.
-- **Hỗ trợ đa người dùng:** Dùng Unix domain socket trên Linux và Named pipe trên Windows.
-
-### Cài đặt nhanh
-
-- **Ubuntu / Debian:** Tải gói `.deb` từ mục [Releases](https://github.com/hieunx1024/view-launcher/releases) và cài bằng `sudo dpkg -i view-launcher_*_amd64.deb`.
-- **Windows:** Tải `view-launcher-setup.exe` từ mục [Releases](https://github.com/hieunx1024/view-launcher/releases).
-- **Arch Linux:** `yay -S view-launcher-git`.
-
-### Giấy phép
-
-Phát hành theo giấy phép [MIT](LICENSE).
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
