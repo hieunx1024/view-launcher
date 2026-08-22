@@ -13,9 +13,11 @@ A minimalist, lightweight application and file launcher for Linux and Windows, b
 ### Features
 
 - **Fast startup:** Sub-millisecond response time with asynchronous background filesystem scanning.
+- **Pure App Launcher by default:** Instant, clutter-free application launcher.
+- **Dedicated File Search Mode (`@f` / `@file`):** Type `@f <keyword>` or browse directly with `/` and `~/` to search files and folders.
 - **Fuzzy search:** Interactive fuzzy matching with matched character highlighting.
 - **Vietnamese accent normalization:** Matches unaccented input against accented filenames (e.g. `tai lieu` matches `Tài liệu`).
-- **Nerd Font integration:** Filetype and application icons.
+- **Nerd Font integration:** Comprehensive application and filetype icon mapping.
 - **Inline calculator:** Computes basic arithmetic expressions directly in the search bar and copies results to clipboard on Enter.
 - **Usage-based ranking:** Frequently and recently launched items are prioritized.
 - **Text editing & navigation:** Full cursor movement (`Left`, `Right`, `Home`, `End`), word deletion (`Ctrl+W`), line clearing (`Ctrl+U`), and Vim-style navigation (`Ctrl+J`, `Ctrl+K`).
@@ -122,9 +124,11 @@ Trình khởi chạy ứng dụng và tìm kiếm tệp tin tối giản, tốc 
 ### Tính năng chính
 
 - **Tốc độ cao:** Quét tệp ngầm bất đồng bộ, phản hồi dưới 1ms.
+- **Mặc định tìm Ứng dụng sạch sẽ:** Mở phần mềm tức thì, không bị lẫn tệp tin rác.
+- **Chế độ tìm File chuyên biệt (`@f` / `@file`):** Gõ `@f <từ khóa>` hoặc đường dẫn `/`, `~/` để tìm và duyệt thư mục, tệp tin.
 - **Tìm kiếm mờ (Fuzzy Search):** Tự động tô màu các ký tự so khớp.
 - **Chuẩn hóa tiếng Việt:** Tìm kiếm không dấu tự động (ví dụ: `tai lieu` tìm `Tài liệu`).
-- **Hỗ trợ Nerd Font:** Hiển thị icon theo loại file và ứng dụng.
+- **Hỗ trợ Nerd Font & Icon ứng dụng:** Nhận diện chính xác icon và phân loại màu sắc cho từng phần mềm trên máy.
 - **Máy tính nhanh:** Nhập biểu thức toán học trực tiếp trong thanh tìm kiếm, nhấn `Enter` để copy kết quả.
 - **Xếp hạng theo tần suất:** Ưu tiên hiển thị các ứng dụng và tệp tin mở thường xuyên.
 - **Điều hướng con trỏ:** Hỗ trợ phím di chuyển con trỏ, xóa từ (`Ctrl+W`), xóa dòng (`Ctrl+U`), phím tắt Vim (`Ctrl+J`, `Ctrl+K`).

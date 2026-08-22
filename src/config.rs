@@ -28,15 +28,15 @@ pub struct ThemeConfig {
     pub show_status_bar: Option<bool>,
 }
 
-fn default_query_color() -> String { "cyan".to_string() }
-fn default_selection_bg() -> String { "#2d3748".to_string() }
-fn default_selection_fg() -> String { "white".to_string() }
-fn default_app_badge_color() -> String { "cyan".to_string() }
-fn default_file_badge_color() -> String { "yellow".to_string() }
-fn default_dir_badge_color() -> String { "green".to_string() }
-fn default_calc_badge_color() -> String { "magenta".to_string() }
-fn default_border_color() -> String { "#4a5568".to_string() }
-fn default_highlight_color() -> String { "#f6e05e".to_string() } // gold / yellow highlight
+fn default_query_color() -> String { "#7aa2f7".to_string() }
+fn default_selection_bg() -> String { "#283457".to_string() }
+fn default_selection_fg() -> String { "#ffffff".to_string() }
+fn default_app_badge_color() -> String { "#7dcfff".to_string() }
+fn default_file_badge_color() -> String { "#9ece6a".to_string() }
+fn default_dir_badge_color() -> String { "#7aa2f7".to_string() }
+fn default_calc_badge_color() -> String { "#bb9af7".to_string() }
+fn default_border_color() -> String { "#3b4261".to_string() }
+fn default_highlight_color() -> String { "#ff9e64".to_string() }
 fn default_true() -> Option<bool> { Some(true) }
 
 impl Default for ThemeConfig {

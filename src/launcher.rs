@@ -180,6 +180,7 @@ impl LauncherEngine {
         let mut name = String::new();
         let mut exec = String::new();
         let mut comment = None;
+        let mut icon_hint = None;
         let mut is_app = false;
         let mut no_display = false;
         let mut hidden = false;
@@ -230,6 +231,11 @@ impl LauncherEngine {
                     "Comment" => {
                         comment = Some(val.to_string());
                     }
+                    "Icon" => {
+                        if icon_hint.is_none() && !val.is_empty() {
+                            icon_hint = Some(val.to_string());
+                        }
+                    }
                     "NoDisplay" => {
                         if val == "true" {
                             no_display = true;
@@ -257,7 +263,7 @@ impl LauncherEngine {
                 item_type: ItemType::App,
                 description: comment,
                 terminal,
-                icon: None,
+                icon: icon_hint,
             })
         } else {
             None
@@ -407,7 +413,9 @@ impl LauncherEngine {
         items
     }
 
-    /// Performs high-performance fuzzy matching and ranking of items, returning matched character indices.
+    /// Performs high-performance fuzzy matching and ranking of items.
+    /// Mặc định: Chỉ tìm ứng dụng & tính toán (cực nhanh, không lẫn file).
+    /// Khi bắt đầu bằng `@f ` hoặc `@file `: Chuyển sang chế độ tìm kiếm file & thư mục.
     pub fn search(&self, query: &str) -> Vec<(LauncherItem, Vec<usize>)> {
         let trimmed_query = query.trim();
         let shallow_files_guard = self.shallow_files.read().unwrap_or_else(|e| e.into_inner());
@@ -415,7 +423,78 @@ impl LauncherEngine {
 
         let mut results = Vec::new();
 
-        // 1. Inline Calculator check
+        // 1. Chế độ tìm kiếm File chuyên biệt khi gõ tiền tố @f hoặc @file
+        let is_file_mode = trimmed_query.starts_with("@f ") || trimmed_query.starts_with("@file ")
+            || trimmed_query == "@f" || trimmed_query == "@file";
+
+        if is_file_mode {
+            let file_query = if trimmed_query.starts_with("@file ") {
+                trimmed_query[6..].trim()
+            } else if trimmed_query.starts_with("@f ") {
+                trimmed_query[3..].trim()
+            } else {
+                ""
+            };
+
+            // Nếu chỉ gõ "@f" hoặc "@f ", hiển thị danh sách các file/thư mục mới nhất
+            if file_query.is_empty() {
+                for file in shallow_files_guard.iter().take(50) {
+                    results.push((file.clone(), Vec::new()));
+                }
+                return results;
+            }
+
+            // Duyệt theo đường dẫn trực tiếp trong file mode (nếu có)
+            if let Some((dir, filter)) = self.resolve_path_search(file_query) {
+                let dir_items = self.scan_dir_on_the_fly(&dir);
+                if filter.is_empty() {
+                    for item in dir_items {
+                        results.push((item, Vec::new()));
+                    }
+                    return results;
+                }
+
+                let mut matched = Vec::new();
+                for item in dir_items {
+                    if let Some((final_score, final_indices)) = self.match_item(&item.name, &filter) {
+                        matched.push(((item, final_indices), final_score));
+                    }
+                }
+                matched.sort_by(|a, b| b.1.cmp(&a.1));
+                for ((item, indices), _) in matched {
+                    results.push((item, indices));
+                }
+                return results;
+            }
+
+            // Tìm kiếm mờ trong toàn bộ Files & Directories
+            let enable_path_matching = self.config.search.enable_path_matching.unwrap_or(true);
+            let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = Vec::new();
+
+            for file in shallow_files_guard.iter() {
+                let match_res = self.match_item(&file.name, file_query);
+                let final_res = if match_res.is_some() {
+                    match_res
+                } else if enable_path_matching {
+                    self.match_item(&file.exec_or_path, file_query)
+                } else {
+                    None
+                };
+
+                if let Some((score, indices)) = final_res {
+                    let boost = history_guard.get_boost(&file.exec_or_path);
+                    matches.push(((file.clone(), indices), score + boost));
+                }
+            }
+
+            matches.sort_by(|a, b| b.1.cmp(&a.1));
+            for (item_with_indices, _) in matches {
+                results.push(item_with_indices);
+            }
+            return results;
+        }
+
+        // 2. Chế độ mặc định: Tính toán nhanh nếu là biểu thức toán
         if let Some(calc_val) = calc::evaluate(trimmed_query) {
             let formatted = calc::format_result(calc_val);
             results.push((
@@ -431,45 +510,32 @@ impl LauncherEngine {
             ));
         }
 
-        // 2. Dynamic path search
-        if let Some((dir, filter)) = self.resolve_path_search(trimmed_query) {
-            let dir_items = self.scan_dir_on_the_fly(&dir);
-            if filter.is_empty() {
+        // 3. Duyệt đường dẫn trực tiếp nếu bắt đầu bằng '/' hoặc '~'
+        if trimmed_query.starts_with('/') || trimmed_query.starts_with('~') {
+            if let Some((dir, filter)) = self.resolve_path_search(trimmed_query) {
+                let dir_items = self.scan_dir_on_the_fly(&dir);
+                if filter.is_empty() {
+                    for item in dir_items {
+                        results.push((item, Vec::new()));
+                    }
+                    return results;
+                }
+
+                let mut matched = Vec::new();
                 for item in dir_items {
-                    results.push((item, Vec::new()));
+                    if let Some((final_score, final_indices)) = self.match_item(&item.name, &filter) {
+                        matched.push(((item, final_indices), final_score));
+                    }
+                }
+                matched.sort_by(|a, b| b.1.cmp(&a.1));
+                for ((item, indices), _) in matched {
+                    results.push((item, indices));
                 }
                 return results;
             }
-            
-            let mut matched = Vec::new();
-            for item in dir_items {
-                let (score_orig, indices_orig) = self.matcher.fuzzy_indices(&item.name, &filter).unwrap_or((0, Vec::new()));
-                let (score_accent, indices_accent) = {
-                    let name_stripped = remove_vietnamese_accents(&item.name);
-                    let filter_stripped = remove_vietnamese_accents(&filter);
-                    self.matcher.fuzzy_indices(&name_stripped, &filter_stripped).unwrap_or((0, Vec::new()))
-                };
-
-                let (final_score, final_indices) = if score_orig >= score_accent && score_orig > 0 {
-                    (score_orig, indices_orig)
-                } else if score_accent > 0 {
-                    (score_accent, indices_accent)
-                } else {
-                    (0, Vec::new())
-                };
-
-                if final_score > 0 {
-                    matched.push(((item, final_indices), final_score));
-                }
-            }
-            matched.sort_by(|a, b| b.1.cmp(&a.1));
-            for ((item, indices), _) in matched {
-                results.push((item, indices));
-            }
-            return results;
         }
 
-        // 3. Empty query: Pinned apps first, then custom apps, other apps, and recent files
+        // 4. Khi chưa gõ: Hiển thị ứng dụng đã ghim (Pinned) -> Ứng dụng tùy biến -> Ứng dụng hệ thống
         if trimmed_query.is_empty() {
             let mut default_apps = Vec::new();
 
@@ -489,59 +555,36 @@ impl LauncherEngine {
                 }
             }
 
-            // Other apps
+            // Standard apps
             for app in &self.apps {
                 if !default_apps.iter().any(|(item, _): &(LauncherItem, _)| item.name == app.name) {
                     default_apps.push((app.clone(), Vec::new()));
                 }
             }
 
-            // Add top shallow files
-            for file in shallow_files_guard.iter().take(50) {
-                default_apps.push((file.clone(), Vec::new()));
-            }
-
             return default_apps;
         }
 
-        // 4. Normal Fuzzy Search
+        // 5. Tìm kiếm mờ trong Ứng dụng (Chỉ tìm App - Cực nhanh & Không rác file)
         let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = Vec::new();
 
-        // 4.1 Search Custom Apps
+        // 5.1 Custom Apps
         for custom in &self.custom_apps {
             if let Some((score, indices)) = self.match_item(&custom.name, trimmed_query) {
-                let boost = history_guard.get_boost(&custom.name) + 150; // High boost for custom apps
+                let boost = history_guard.get_boost(&custom.name) + 150;
                 matches.push(((custom.clone(), indices), score + boost));
             }
         }
 
-        // 4.2 Search Standard Apps
+        // 5.2 Standard Apps
         for app in &self.apps {
             if let Some((score, indices)) = self.match_item(&app.name, trimmed_query) {
-                let boost = history_guard.get_boost(&app.name) + 100; // App boost
+                let boost = history_guard.get_boost(&app.name) + 100;
                 matches.push(((app.clone(), indices), score + boost));
             }
         }
 
-        // 4.3 Search Files
-        let enable_path_matching = self.config.search.enable_path_matching.unwrap_or(true);
-        for file in shallow_files_guard.iter() {
-            let match_res = self.match_item(&file.name, trimmed_query);
-            let final_res = if match_res.is_some() {
-                match_res
-            } else if enable_path_matching {
-                self.match_item(&file.exec_or_path, trimmed_query)
-            } else {
-                None
-            };
-
-            if let Some((score, indices)) = final_res {
-                let boost = history_guard.get_boost(&file.exec_or_path);
-                matches.push(((file.clone(), indices), score + boost));
-            }
-        }
-
-        // Sort by total score descending
+        // Sắp xếp theo độ khớp và lịch sử sử dụng
         matches.sort_by(|a, b| b.1.cmp(&a.1));
 
         for (item_with_indices, _) in matches {
@@ -832,5 +875,14 @@ mod tests {
             assert!(engine.resolve_path_search(&home_str).is_some());
         }
     }
+
+    #[test]
+    fn test_file_mode_search() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        let results = engine.search("@f");
+        assert!(results.iter().all(|(item, _)| item.item_type == ItemType::File || item.item_type == ItemType::Dir));
+    }
 }
+
 
