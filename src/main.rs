@@ -177,6 +177,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "",
     )));
 
+    // Preload icons on startup (takes <15ms with O(1) index)
+    icon_resolver.preload_icons(&engine.apps);
+
     // 5. Connect Search Text Changed
     {
         let engine = engine.clone();
@@ -313,6 +316,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let _ = ui.hide();
             }
             std::process::exit(0);
+        });
+    }
+
+    // 10.1 Connect Window Dragged
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_window_dragged(move |dx, dy| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let current_pos = ui.window().position();
+                let scale = ui.window().scale_factor();
+                let new_x = current_pos.x + (dx * scale) as i32;
+                let new_y = current_pos.y + (dy * scale) as i32;
+                ui.window().set_position(slint::PhysicalPosition::new(new_x, new_y));
+            }
         });
     }
 

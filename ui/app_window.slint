@@ -33,6 +33,7 @@ export component AppWindow inherits Window {
     callback copy_path(int);
     callback open_config();
     callback close_window();
+    callback window_dragged(length, length);
 
     forward-focus: search_input;
 
@@ -53,37 +54,45 @@ export component AppWindow inherits Window {
             padding-bottom: 10px;
             spacing: 10px;
 
-            // 1. Top Header Bar
-            HorizontalLayout {
+            // 1. Top Header Bar (Drag Area)
+            header_bar := Rectangle {
                 height: 22px;
 
-                HorizontalLayout {
-                    spacing: 6px;
-                    alignment: start;
-                    Text {
-                        text: root.mode_icon;
-                        color: root.is_file_mode ? #2ac3de : #7aa2f7;
-                        font-size: 14px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.mode_title;
-                        color: root.is_file_mode ? #2ac3de : #7aa2f7;
-                        font-size: 12px;
-                        font-weight: 700;
-                        vertical-alignment: center;
+                TouchArea {
+                    moved => {
+                        root.window_dragged(self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
                     }
                 }
 
                 HorizontalLayout {
-                    alignment: end;
-                    Text {
-                        text: root.status_item_count;
-                        color: #565f89;
-                        font-size: 12px;
-                        font-weight: 600;
-                        vertical-alignment: center;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: start;
+                        Text {
+                            text: root.mode_icon;
+                            color: root.is_file_mode ? #2ac3de : #7aa2f7;
+                            font-size: 14px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.mode_title;
+                            color: root.is_file_mode ? #2ac3de : #7aa2f7;
+                            font-size: 12px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        alignment: end;
+                        Text {
+                            text: root.status_item_count;
+                            color: #565f89;
+                            font-size: 12px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }
