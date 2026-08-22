@@ -3,21 +3,24 @@ name = "view-launcher"
 version = "0.2.0"
 edition = "2024"
 authors = ["Hieu Nguyen <hieunx@outlook.com>"]
-description = "A minimalist, high-performance terminal TUI app & file launcher in Rust (<1ms)"
+description = "A minimalist, high-performance desktop app & file launcher in Rust (<5ms)"
 license = "MIT"
 repository = "https://github.com/hieunx1024/view-launcher"
 readme = "README.md"
-keywords = ["launcher", "tui", "ratatui", "wayland", "fuzzy-search"]
-categories = ["command-line-utilities"]
+keywords = ["launcher", "slint", "gui", "wayland", "fuzzy-search"]
+categories = ["command-line-utilities", "gui"]
 
 [dependencies]
-ratatui = "0.26"
-crossterm = { version = "0.27", features = ["event-stream"] }
+slint = "1.9"
 fuzzy-matcher = "0.3.7"
 walkdir = "2.5"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 dirs = "5.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[build-dependencies]
+slint-build = "1.9"
 
 [package.metadata.deb]
 name = "view-launcher"
@@ -25,9 +28,9 @@ maintainer = "Hieu Nguyen <hieunx@outlook.com>"
 copyright = "2026, Hieu Nguyen <hieunx@outlook.com>"
 license-file = ["README.md", "4"]
 extended-description = """\
-A minimalist, high-performance terminal TUI app & file launcher in Rust (<1ms). \
-Supports Wayland, X11, and Windows with smart fuzzy search, Vietnamese accent normalization, \
-inline calculator, and configurable paths."""
+A minimalist, high-performance desktop GUI app & file launcher in Rust (<5ms). \
+Supports Wayland, X11, and Windows with native system icons, smart fuzzy search, \
+Vietnamese accent normalization, inline calculator, and configurable paths."""
 section = "utils"
 priority = "optional"
 assets = [

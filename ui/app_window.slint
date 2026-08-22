@@ -1,0 +1,321 @@
+import { ScrollView, ListView } from "std-widgets.slint";
+
+export struct LauncherItemData {
+    name: string,
+    category: string,
+    item_type: string,
+    has_icon: bool,
+    icon: image,
+    exec_or_path: string,
+}
+
+export component AppWindow inherits Window {
+    title: "View Launcher";
+    no-frame: true;
+    background: transparent;
+    width: 680px;
+    height: 480px;
+
+    in-out property <string> search_text: "";
+    in-out property <int> selected_index: 0;
+    in property <[LauncherItemData]> items: [];
+    in property <string> mode_title: "VIEW LAUNCHER";
+    in property <string> mode_icon: "󰀻";
+    in property <bool> is_file_mode: false;
+    in property <string> status_item_count: "0 items";
+
+    callback search_text_changed(string);
+    callback item_activated(int);
+    callback open_in_terminal(int);
+    callback copy_path(int);
+    callback open_config();
+    callback close_window();
+
+    forward-focus: search_input;
+
+    // Main Card Container with rounded corners & Tokyo Night dark palette
+    main_card := Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #1a1b26;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: #3b4261;
+        clip: true;
+
+        VerticalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 12px;
+            padding-bottom: 10px;
+            spacing: 10px;
+
+            // 1. Top Header Bar
+            HorizontalLayout {
+                height: 22px;
+                alignment: space-between;
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: root.mode_icon;
+                        color: root.is_file_mode ? #2ac3de : #7aa2f7;
+                        font-size: 14px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: root.mode_title;
+                        color: root.is_file_mode ? #2ac3de : #7aa2f7;
+                        font-size: 12px;
+                        font-weight: 700;
+                        letter-spacing: 1px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: root.status_item_count;
+                    color: #565f89;
+                    font-size: 12px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+
+            // 2. Search Box
+            search_box := Rectangle {
+                height: 44px;
+                background: #24283b;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: root.is_file_mode ? #2ac3de : #414868;
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 10px;
+
+                    // Search lens / Folder glyph
+                    Text {
+                        text: root.is_file_mode ? "󰉋" : "󰍉";
+                        color: root.is_file_mode ? #2ac3de : #7dcfff;
+                        font-size: 18px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    // Input Field
+                    search_input := TextInput {
+                        text <=> root.search_text;
+                        font-size: 15px;
+                        color: #f0f6fc;
+                        selection-background-color: #3b4261;
+                        selection-foreground-color: #ffffff;
+                        vertical-alignment: center;
+
+                        edited => {
+                            root.search_text_changed(self.text);
+                        }
+
+                        key-pressed(event) => {
+                            if (event.text == Key.Escape) {
+                                root.close_window();
+                                return accept;
+                            }
+                            if (event.text == Key.Return) {
+                                root.item_activated(root.selected_index);
+                                return accept;
+                            }
+                            if (event.text == Key.DownArrow) {
+                                if (root.selected_index + 1 < root.items.length) {
+                                    root.selected_index += 1;
+                                }
+                                return accept;
+                            }
+                            if (event.text == Key.UpArrow) {
+                                if (root.selected_index > 0) {
+                                    root.selected_index -= 1;
+                                }
+                                return accept;
+                            }
+                            if (event.modifiers.control && event.text == ",") {
+                                root.open_config();
+                                return accept;
+                            }
+                            if (event.modifiers.alt && (event.text == "t" || event.text == "T")) {
+                                root.open_in_terminal(root.selected_index);
+                                return accept;
+                            }
+                            if (event.modifiers.alt && (event.text == "c" || event.text == "C")) {
+                                root.copy_path(root.selected_index);
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+                }
+            }
+
+            // 3. Item Results List
+            list_container := Rectangle {
+                vertical-stretch: 1;
+                clip: true;
+
+                if root.items.length == 0 : Rectangle {
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 8px;
+                        Text {
+                            text: "󰋔";
+                            font-size: 32px;
+                            color: #414868;
+                            horizontal-alignment: center;
+                        }
+                        Text {
+                            text: "No matching applications, files, or calculations found.";
+                            font-size: 13px;
+                            color: #565f89;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                if root.items.length > 0 : ListView {
+                    for item[index] in root.items : item_row := Rectangle {
+                        height: 42px;
+                        background: (index == root.selected_index) ? #283457 : (item_touch.has-hover ? #1f2335 : transparent);
+                        border-radius: 6px;
+
+                        item_touch := TouchArea {
+                            clicked => {
+                                root.selected_index = index;
+                                root.item_activated(index);
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 12px;
+                            spacing: 12px;
+                            alignment: space-between;
+
+                            // Left Side: Selection indicator + App Icon + Item Name
+                            HorizontalLayout {
+                                spacing: 10px;
+
+                                // Active selection vertical pill
+                                Rectangle {
+                                    width: 3px;
+                                    height: 18px;
+                                    border-radius: 2px;
+                                    background: (index == root.selected_index) ? #7dcfff : transparent;
+                                    vertical-alignment: center;
+                                }
+
+                                // Real System Icon Image
+                                if item.has_icon : Image {
+                                    source: item.icon;
+                                    width: 24px;
+                                    height: 24px;
+                                    image-fit: contain;
+                                    vertical-alignment: center;
+                                }
+
+                                // Fallback icon when no image
+                                if !item.has_icon : Text {
+                                    text: (item.item_type == "dir") ? "" : (item.item_type == "calc" ? "󰃬" : "󰀻");
+                                    color: (item.item_type == "calc") ? #9ece6a : (item.item_type == "dir" ? #7aa2f7 : #7dcfff);
+                                    font-size: 18px;
+                                    vertical-alignment: center;
+                                }
+
+                                // Item Name
+                                Text {
+                                    text: item.name;
+                                    color: (index == root.selected_index) ? #ffffff : #c0caf5;
+                                    font-size: 14px;
+                                    font-weight: (index == root.selected_index) ? 700 : 500;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+
+                            // Right Side: Category Badge / Path preview
+                            Rectangle {
+                                background: (index == root.selected_index) ? #1f2335 : #24283b;
+                                border-radius: 4px;
+                                height: 22px;
+                                border-width: 1px;
+                                border-color: (index == root.selected_index) ? #3b4261 : #292e42;
+                                vertical-alignment: center;
+
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    Text {
+                                        text: item.category;
+                                        color: (index == root.selected_index) ? #7dcfff : #7aa2f7;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Clean Footer Status Bar
+            footer := Rectangle {
+                height: 26px;
+                border-top-width: 1px;
+                border-color: #292e42;
+
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 16px;
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[↵]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Open"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Tab]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Complete"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Alt+T]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Terminal"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Ctrl+,]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Settings"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Esc]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Quit"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+    }
+}

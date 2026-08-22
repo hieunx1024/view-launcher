@@ -3,10 +3,10 @@ Version=1.0
 Type=Application
 Name=View Launcher
 GenericName=Application & File Launcher
-Comment=Minimalist, high-performance TUI app & file launcher in Rust (<1ms)
-Exec=env XMODIFIERS="" GTK_IM_MODULE=none QT_IM_MODULE=none view-launcher
+Comment=Minimalist, high-performance GUI desktop app & file launcher in Rust (<5ms)
+Exec=view-launcher
 Icon=view-launcher
-Terminal=true
+Terminal=false
 Categories=Utility;System;
-Keywords=launcher;search;fuzzy;app;file;calculator;tui;
+Keywords=launcher;search;fuzzy;app;file;calculator;gui;
 StartupNotify=false

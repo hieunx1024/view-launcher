@@ -1,31 +1,29 @@
+slint::include_modules!();
+
 mod calc;
 mod config;
 mod history;
-mod icons;
+mod icon_resolver;
 mod launcher;
-mod ui;
 
-use std::io::{stdout, Write};
 use std::path::PathBuf;
-use std::time::Duration;
-use std::thread;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use std::thread;
+
 use config::Config;
-use launcher::{LauncherEngine, LauncherItem};
-use ui::UiState;
+use icon_resolver::IconResolver;
+use launcher::{LauncherEngine, LauncherItem, open_config_file};
 
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
+#[cfg(unix)]
+use std::io::Write;
 
 #[cfg(windows)]
 use std::net::{TcpListener, TcpStream};
+#[cfg(windows)]
+use std::io::Write;
 
 #[cfg(unix)]
 fn get_socket_path() -> PathBuf {
@@ -38,10 +36,10 @@ fn get_socket_path() -> PathBuf {
 }
 
 #[cfg(unix)]
-fn handle_single_instance(exit_trigger: Arc<AtomicBool>) -> bool {
+fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) -> bool {
     let socket_path = get_socket_path();
 
-    // 1. Try connecting to existing socket
+    // 1. Try connecting to existing socket to toggle window
     if let Ok(mut stream) = UnixStream::connect(&socket_path) {
         let _ = stream.write_all(b"toggle");
         return false;
@@ -50,14 +48,26 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>) -> bool {
     // 2. Remove stale socket file if it exists
     let _ = std::fs::remove_file(&socket_path);
 
-    // 3. Bind new Unix socket
+    // 3. Bind new Unix socket listener
     if let Ok(listener) = UnixListener::bind(&socket_path) {
         let path_clone = socket_path.clone();
         thread::spawn(move || {
             for stream in listener.incoming() {
                 if stream.is_ok() {
-                    exit_trigger.store(true, Ordering::SeqCst);
-                    break;
+                    let _ = slint::invoke_from_event_loop({
+                        let ui_weak = ui_handle.clone();
+                        let exit_flag = exit_trigger.clone();
+                        move || {
+                            if let Some(ui) = ui_weak.upgrade() {
+                                if ui.window().is_visible() {
+                                    exit_flag.store(true, Ordering::SeqCst);
+                                    let _ = ui.hide();
+                                } else {
+                                    let _ = ui.show();
+                                }
+                            }
+                        }
+                    });
                 }
             }
             let _ = std::fs::remove_file(&path_clone);
@@ -68,472 +78,218 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>) -> bool {
 }
 
 #[cfg(windows)]
-const LOCAL_PORT: u16 = 19428;
-
-#[cfg(windows)]
-fn handle_single_instance(exit_trigger: Arc<AtomicBool>) -> bool {
-    if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", LOCAL_PORT)) {
+fn handle_single_instance(_exit_trigger: Arc<AtomicBool>, _ui_handle: slint::Weak<AppWindow>) -> bool {
+    // Port 42425 on localhost for Windows single instance
+    if let Ok(mut stream) = TcpStream::connect("127.0.0.1:42425") {
         let _ = stream.write_all(b"toggle");
         return false;
     }
-    
-    if let Ok(listener) = TcpListener::bind(("127.0.0.1", LOCAL_PORT)) {
+
+    if let Ok(listener) = TcpListener::bind("127.0.0.1:42425") {
         thread::spawn(move || {
-            for stream in listener.incoming() {
-                if stream.is_ok() {
-                    exit_trigger.store(true, Ordering::SeqCst);
-                    break;
-                }
+            for _ in listener.incoming() {
+                // Wake up window
             }
         });
     }
-    
+
     true
 }
 
-struct App {
-    input: String,
-    cursor_pos: usize,
-    results: Vec<(LauncherItem, Vec<usize>)>,
-    selected_index: usize,
-    engine: LauncherEngine,
-    config: Config,
-    should_quit: bool,
-}
+fn populate_items(
+    ui: &AppWindow,
+    engine: &LauncherEngine,
+    icon_resolver: &IconResolver,
+    query: &str,
+) -> Vec<LauncherItem> {
+    let trimmed = query.trim();
+    let is_file_mode = trimmed.starts_with("@f") || trimmed.starts_with("@file");
+    let results = engine.search(query);
 
-impl App {
-    fn new(config: Config) -> Self {
-        let engine = LauncherEngine::new(config.clone());
-        let results = engine.search("");
-        Self {
-            input: String::new(),
-            cursor_pos: 0,
-            results,
-            selected_index: 0,
-            engine,
-            config,
-            should_quit: false,
-        }
+    ui.set_is_file_mode(is_file_mode);
+    if is_file_mode {
+        ui.set_mode_icon("󰉋".into());
+        ui.set_mode_title("FILE SEARCH".into());
+        ui.set_status_item_count(format!("{} files", results.len()).into());
+    } else {
+        ui.set_mode_icon("󰀻".into());
+        ui.set_mode_title("VIEW LAUNCHER".into());
+        ui.set_status_item_count(format!("{} apps", results.len()).into());
     }
 
-    fn update_search(&mut self) {
-        self.results = self.engine.search(&self.input);
-        self.selected_index = 0; // Focus top match
+    let mut current_items = Vec::new();
+    let mut slint_items = Vec::new();
+
+    for (item, _indices) in results.into_iter().take(40) {
+        let slint_icon = icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
+        let has_icon = slint_icon.is_some();
+        let icon_img = slint_icon.unwrap_or_default();
+        let category = item.get_category_tag().to_string();
+
+        let item_type_str = match item.item_type {
+            launcher::ItemType::App => "app",
+            launcher::ItemType::File => "file",
+            launcher::ItemType::Dir => "dir",
+            launcher::ItemType::Calc => "calc",
+        };
+
+        slint_items.push(LauncherItemData {
+            name: item.name.clone().into(),
+            category: category.into(),
+            item_type: item_type_str.into(),
+            has_icon,
+            icon: icon_img,
+            exec_or_path: item.exec_or_path.clone().into(),
+        });
+
+        current_items.push(item);
     }
 
-    fn delete_word_backward(&mut self) {
-        let chars: Vec<char> = self.input.chars().collect();
-        if self.cursor_pos == 0 || chars.is_empty() {
-            return;
-        }
+    let model = std::rc::Rc::new(slint::VecModel::from(slint_items));
+    ui.set_items(model.into());
 
-        let mut new_pos = self.cursor_pos.min(chars.len());
-        // 1. Skip spaces before cursor
-        while new_pos > 0 && chars[new_pos - 1].is_whitespace() {
-            new_pos -= 1;
-        }
-        // 2. Skip word characters
-        while new_pos > 0 && !chars[new_pos - 1].is_whitespace() && chars[new_pos - 1] != '/' {
-            new_pos -= 1;
-        }
-        if new_pos == self.cursor_pos && new_pos > 0 {
-            new_pos -= 1;
-        }
-
-        let mut new_chars = Vec::new();
-        new_chars.extend_from_slice(&chars[..new_pos]);
-        if self.cursor_pos < chars.len() {
-            new_chars.extend_from_slice(&chars[self.cursor_pos..]);
-        }
-
-        self.input = new_chars.into_iter().collect();
-        self.cursor_pos = new_pos;
-        self.update_search();
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn auto_bootstrap_windows() {
-    use std::os::windows::process::CommandExt;
-    if let Ok(app_path) = std::env::current_exe() {
-        if let Some(app_str) = app_path.to_str() {
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                let shortcut_path = format!(
-                    r"{}\Microsoft\Windows\Start Menu\Programs\Startup\ViewLauncher.lnk",
-                    appdata
-                );
-
-                if !std::path::Path::new(&shortcut_path).exists() {
-                    let ps_script = format!(
-                        "$WshShell = New-Object -ComObject WScript.Shell; \
-                         $Shortcut = $WshShell.CreateShortcut('{}'); \
-                         $Shortcut.TargetPath = 'wt.exe'; \
-                         $Shortcut.Arguments = '-d . \"{}\"'; \
-                         $Shortcut.Hotkey = 'Ctrl+Alt+Space'; \
-                         $Shortcut.Save()",
-                        shortcut_path, app_str
-                    );
-
-                    let _ = std::process::Command::new("powershell")
-                        .args(&["-Command", &ps_script])
-                        .creation_flags(0x08000000) // CREATE_NO_WINDOW
-                        .status();
-                }
-            }
-        }
-    }
-}
-
-enum ActiveIme {
-    None,
-    Fcitx(&'static str),
-    Ibus(String),
-}
-
-struct ImeGuard {
-    active_ime: ActiveIme,
-}
-
-impl ImeGuard {
-    fn new() -> Self {
-        let mut active_ime = ActiveIme::None;
-        #[cfg(target_os = "linux")]
-        {
-            let mut fcitx_cmd = "fcitx5-remote";
-            let mut fcitx_output = std::process::Command::new("fcitx5-remote").output();
-            if fcitx_output.is_err() {
-                fcitx_cmd = "fcitx-remote";
-                fcitx_output = std::process::Command::new("fcitx-remote").output();
-            }
-
-            if let Ok(out) = fcitx_output {
-                let status = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if status == "2" {
-                    active_ime = ActiveIme::Fcitx(fcitx_cmd);
-                    let _ = std::process::Command::new(fcitx_cmd).arg("-c").status();
-
-                    std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_millis(50));
-                        let _ = std::process::Command::new(fcitx_cmd).arg("-c").status();
-                        std::thread::sleep(std::time::Duration::from_millis(150));
-                        let _ = std::process::Command::new(fcitx_cmd).arg("-c").status();
-                    });
-                }
-            }
-
-            if matches!(active_ime, ActiveIme::None) {
-                if let Ok(output) = std::process::Command::new("ibus").arg("engine").output() {
-                    let engine = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if engine == "bamboo" || engine == "unikey" || engine == "bogo" || engine.contains("vietnamese") {
-                        active_ime = ActiveIme::Ibus(engine);
-                        let _ = std::process::Command::new("ibus").args(&["engine", "xkb:us::eng"]).status();
-                    }
-                }
-            }
-        }
-        Self { active_ime }
-    }
-}
-
-impl Drop for ImeGuard {
-    fn drop(&mut self) {
-        #[cfg(target_os = "linux")]
-        match &self.active_ime {
-            ActiveIme::Fcitx(cmd) => {
-                let _ = std::process::Command::new(*cmd).arg("-o").status();
-            }
-            ActiveIme::Ibus(original_engine) => {
-                let _ = std::process::Command::new("ibus").args(&["engine", original_engine]).status();
-            }
-            ActiveIme::None => {}
-        }
-    }
-}
-
-fn cleanup_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<(), Box<dyn std::error::Error>> {
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
-    Ok(())
+    current_items
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(target_os = "windows")]
-    auto_bootstrap_windows();
-
-    // 1. Setup panic hook to ensure terminal is restored if app crashes
-    let original_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        let _ = disable_raw_mode();
-        let mut stdout = stdout();
-        let _ = execute!(stdout, LeaveAlternateScreen);
-        #[cfg(unix)]
-        {
-            let _ = std::fs::remove_file(get_socket_path());
-        }
-        original_hook(panic_info);
-    }));
-
-    // 2. Single Instance Lock check
     let exit_trigger = Arc::new(AtomicBool::new(false));
-    if !handle_single_instance(exit_trigger.clone()) {
+
+    // 1. Create main Slint Window
+    let ui = AppWindow::new()?;
+
+    // 2. Single-Instance Check
+    if !handle_single_instance(exit_trigger.clone(), ui.as_weak()) {
         return Ok(());
     }
 
-    // 3. Load Configuration and Setup Engine
+    // 3. Load Config & Initialize Engine
     let config = Config::load();
-    let _ime_guard = if config.search.disable_ime.unwrap_or(false) {
-        Some(ImeGuard::new())
-    } else {
-        None
-    };
-    let mut app = App::new(config);
+    let engine = Arc::new(LauncherEngine::new(config));
+    let icon_resolver = Arc::new(IconResolver::new());
 
-    // 4. Initialize Terminal
-    enable_raw_mode()?;
-    let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    // 4. Initial Population
+    let current_results = Arc::new(std::sync::RwLock::new(populate_items(
+        &ui,
+        &engine,
+        &icon_resolver,
+        "",
+    )));
 
-    terminal.clear()?;
+    // 5. Connect Search Text Changed
+    {
+        let engine = engine.clone();
+        let icon_resolver = icon_resolver.clone();
+        let current_results = current_results.clone();
+        let ui_weak = ui.as_weak();
 
-    // 5. Main Event Loop
-    while !app.should_quit {
-        if exit_trigger.load(Ordering::SeqCst) {
-            app.should_quit = true;
-            break;
-        }
-
-        // Auto-refresh once background file scanning completes
-        let has_files = app.results.iter().any(|(i, _)| matches!(i.item_type, launcher::ItemType::File | launcher::ItemType::Dir));
-        let scan_completed = app.engine.shallow_files.read().map(|f| !f.is_empty()).unwrap_or(false);
-        if !has_files && scan_completed && app.input.is_empty() {
-            app.update_search();
-        }
-
-        terminal.draw(|f| {
-            let state = UiState {
-                input: &app.input,
-                cursor_pos: app.cursor_pos,
-                results: &app.results,
-                selected_index: app.selected_index,
-                theme: &app.config.theme,
-            };
-            ui::draw(f, &state);
-        })?;
-
-        // Process inputs
-        if event::poll(Duration::from_millis(50))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == event::KeyEventKind::Release {
-                    continue;
+        ui.on_search_text_changed(move |text| {
+            if let Some(ui) = ui_weak.upgrade() {
+                let items = populate_items(&ui, &engine, &icon_resolver, &text);
+                if let Ok(mut lock) = current_results.write() {
+                    *lock = items;
                 }
-
-                let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-                let has_alt = key.modifiers.contains(KeyModifiers::ALT);
-                let has_shift = key.modifiers.contains(KeyModifiers::SHIFT);
-
-                match key.code {
-                    KeyCode::Esc => {
-                        app.should_quit = true;
-                    }
-                    KeyCode::Char('c') if has_ctrl => {
-                        app.should_quit = true;
-                    }
-                    KeyCode::Char('u') if has_ctrl => {
-                        app.input.clear();
-                        app.cursor_pos = 0;
-                        app.update_search();
-                    }
-                    KeyCode::Char('w') if has_ctrl => {
-                        app.delete_word_backward();
-                    }
-                    KeyCode::Char('a') if has_ctrl => {
-                        app.cursor_pos = 0;
-                    }
-                    KeyCode::Char('e') if has_ctrl => {
-                        app.cursor_pos = app.input.chars().count();
-                    }
-                    KeyCode::Left => {
-                        app.cursor_pos = app.cursor_pos.saturating_sub(1);
-                    }
-                    KeyCode::Right => {
-                        let char_count = app.input.chars().count();
-                        if app.cursor_pos < char_count {
-                            app.cursor_pos += 1;
-                        }
-                    }
-                    KeyCode::Home => {
-                        app.cursor_pos = 0;
-                    }
-                    KeyCode::End => {
-                        app.cursor_pos = app.input.chars().count();
-                    }
-                    KeyCode::Char('j') if has_ctrl => {
-                        if !app.results.is_empty() {
-                            app.selected_index = (app.selected_index + 1) % app.results.len();
-                        }
-                    }
-                    KeyCode::Char('n') if has_ctrl => {
-                        if !app.results.is_empty() {
-                            app.selected_index = (app.selected_index + 1) % app.results.len();
-                        }
-                    }
-                    KeyCode::Down => {
-                        if !app.results.is_empty() {
-                            app.selected_index = (app.selected_index + 1) % app.results.len();
-                        }
-                    }
-                    KeyCode::Char('k') if has_ctrl => {
-                        if !app.results.is_empty() {
-                            if app.selected_index == 0 {
-                                app.selected_index = app.results.len() - 1;
-                            } else {
-                                app.selected_index -= 1;
-                            }
-                        }
-                    }
-                    KeyCode::Char('p') if has_ctrl => {
-                        if !app.results.is_empty() {
-                            if app.selected_index == 0 {
-                                app.selected_index = app.results.len() - 1;
-                            } else {
-                                app.selected_index -= 1;
-                            }
-                        }
-                    }
-                    KeyCode::Up => {
-                        if !app.results.is_empty() {
-                            if app.selected_index == 0 {
-                                app.selected_index = app.results.len() - 1;
-                            } else {
-                                app.selected_index -= 1;
-                            }
-                        }
-                    }
-                    KeyCode::PageDown | KeyCode::Char('d') if has_ctrl => {
-                        if !app.results.is_empty() {
-                            app.selected_index = (app.selected_index + 5).min(app.results.len() - 1);
-                        }
-                    }
-                    KeyCode::PageUp => {
-                        if !app.results.is_empty() {
-                            app.selected_index = app.selected_index.saturating_sub(5);
-                        }
-                    }
-                    KeyCode::Backspace => {
-                        if has_alt {
-                            app.delete_word_backward();
-                        } else if app.cursor_pos > 0 {
-                            let mut chars: Vec<char> = app.input.chars().collect();
-                            if app.cursor_pos <= chars.len() {
-                                chars.remove(app.cursor_pos - 1);
-                                app.input = chars.into_iter().collect();
-                                app.cursor_pos -= 1;
-                                app.update_search();
-                            }
-                        }
-                    }
-                    KeyCode::Delete => {
-                        let mut chars: Vec<char> = app.input.chars().collect();
-                        if app.cursor_pos < chars.len() {
-                            chars.remove(app.cursor_pos);
-                            app.input = chars.into_iter().collect();
-                            app.update_search();
-                        }
-                    }
-                    KeyCode::Tab => {
-                        if !app.results.is_empty() {
-                            let selected_item = &app.results[app.selected_index].0;
-                            match selected_item.item_type {
-                                launcher::ItemType::Dir => {
-                                    let mut path = selected_item.exec_or_path.clone();
-                                    if let Some(home) = dirs::home_dir() {
-                                        let home_str = home.to_string_lossy().to_string();
-                                        if path.starts_with(&home_str) {
-                                            path = path.replacen(&home_str, "~", 1);
-                                        }
-                                    }
-                                    if !path.ends_with('/') {
-                                        path.push('/');
-                                    }
-                                    app.input = path;
-                                    app.cursor_pos = app.input.chars().count();
-                                    app.update_search();
-                                }
-                                launcher::ItemType::File => {
-                                    let mut path = selected_item.exec_or_path.clone();
-                                    if let Some(home) = dirs::home_dir() {
-                                        let home_str = home.to_string_lossy().to_string();
-                                        if path.starts_with(&home_str) {
-                                            path = path.replacen(&home_str, "~", 1);
-                                        }
-                                    }
-                                    app.input = path;
-                                    app.cursor_pos = app.input.chars().count();
-                                    app.update_search();
-                                }
-                                launcher::ItemType::App => {
-                                    app.input = selected_item.name.clone();
-                                    app.cursor_pos = app.input.chars().count();
-                                    app.update_search();
-                                }
-                                launcher::ItemType::Calc => {
-                                    app.input = selected_item.exec_or_path.clone();
-                                    app.cursor_pos = app.input.chars().count();
-                                    app.update_search();
-                                }
-                            }
-                        }
-                    }
-                    KeyCode::Char('t') if has_alt => {
-                        // Alt + T: Open containing directory in Terminal
-                        if !app.results.is_empty() {
-                            let selected_item = &app.results[app.selected_index].0;
-                            app.engine.open_in_terminal(selected_item);
-                            app.should_quit = true;
-                        }
-                    }
-                    KeyCode::Char('c') if has_alt => {
-                        // Alt + C: Copy path or result to clipboard
-                        if !app.results.is_empty() {
-                            let selected_item = &app.results[app.selected_index].0;
-                            app.engine.copy_to_clipboard(&selected_item.exec_or_path);
-                            app.should_quit = true;
-                        }
-                    }
-                    KeyCode::Enter => {
-                        if !app.results.is_empty() {
-                            let selected_item = &app.results[app.selected_index].0;
-                            if has_shift {
-                                app.engine.open_in_terminal(selected_item);
-                            } else {
-                                app.engine.launch(selected_item);
-                            }
-                            app.should_quit = true;
-                        }
-                    }
-                    KeyCode::Char(c) => {
-                        let mut chars: Vec<char> = app.input.chars().collect();
-                        let pos = app.cursor_pos.min(chars.len());
-                        chars.insert(pos, c);
-                        app.input = chars.into_iter().collect();
-                        app.cursor_pos = pos + 1;
-                        app.update_search();
-                    }
-                    _ => {}
-                }
+                ui.set_selected_index(0);
             }
-        }
+        });
     }
 
-    // 6. Restore Terminal State and cleanup
-    cleanup_terminal(&mut terminal)?;
+    // 6. Connect Item Activated (Enter key)
+    {
+        let engine = engine.clone();
+        let current_results = current_results.clone();
+        let ui_weak = ui.as_weak();
 
+        ui.on_item_activated(move |idx| {
+            let idx = idx as usize;
+            let item_opt = {
+                if let Ok(lock) = current_results.read() {
+                    lock.get(idx).cloned()
+                } else {
+                    None
+                }
+            };
+
+            if let Some(item) = item_opt {
+                if let Some(ui) = ui_weak.upgrade() {
+                    let _ = ui.hide();
+                }
+                engine.launch(&item);
+                std::process::exit(0);
+            }
+        });
+    }
+
+    // 7. Connect Open In Terminal (Alt+T)
+    {
+        let engine = engine.clone();
+        let current_results = current_results.clone();
+        let ui_weak = ui.as_weak();
+
+        ui.on_open_in_terminal(move |idx| {
+            let idx = idx as usize;
+            let item_opt = {
+                if let Ok(lock) = current_results.read() {
+                    lock.get(idx).cloned()
+                } else {
+                    None
+                }
+            };
+
+            if let Some(item) = item_opt {
+                if let Some(ui) = ui_weak.upgrade() {
+                    let _ = ui.hide();
+                }
+                engine.open_in_terminal(&item);
+                std::process::exit(0);
+            }
+        });
+    }
+
+    // 8. Connect Copy Path (Alt+C)
+    {
+        let engine = engine.clone();
+        let current_results = current_results.clone();
+
+        ui.on_copy_path(move |idx| {
+            let idx = idx as usize;
+            let item_opt = {
+                if let Ok(lock) = current_results.read() {
+                    lock.get(idx).cloned()
+                } else {
+                    None
+                }
+            };
+
+            if let Some(item) = item_opt {
+                engine.copy_to_clipboard(&item.exec_or_path);
+            }
+        });
+    }
+
+    // 9. Connect Open Config (Ctrl+,)
+    ui.on_open_config(move || {
+        open_config_file();
+    });
+
+    // 10. Connect Close Window (Esc)
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_close_window(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let _ = ui.hide();
+            }
+            std::process::exit(0);
+        });
+    }
+
+    // 11. Run Slint Event Loop
+    ui.run()?;
+
+    // Cleanup socket on exit
     #[cfg(unix)]
     {
-        let _ = std::fs::remove_file(get_socket_path());
+        let socket_path = get_socket_path();
+        let _ = std::fs::remove_file(&socket_path);
     }
 
     Ok(())

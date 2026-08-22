@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use std::fs;
-use ratatui::style::Color;
+use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ThemeConfig {
@@ -10,14 +10,6 @@ pub struct ThemeConfig {
     pub selection_bg: String,
     #[serde(default = "default_selection_fg")]
     pub selection_fg: String,
-    #[serde(default = "default_app_badge_color")]
-    pub app_badge_color: String,
-    #[serde(default = "default_file_badge_color")]
-    pub file_badge_color: String,
-    #[serde(default = "default_dir_badge_color")]
-    pub dir_badge_color: String,
-    #[serde(default = "default_calc_badge_color")]
-    pub calc_badge_color: String,
     #[serde(default = "default_border_color")]
     pub border_color: String,
     #[serde(default = "default_highlight_color")]
@@ -31,10 +23,6 @@ pub struct ThemeConfig {
 fn default_query_color() -> String { "#7aa2f7".to_string() }
 fn default_selection_bg() -> String { "#283457".to_string() }
 fn default_selection_fg() -> String { "#ffffff".to_string() }
-fn default_app_badge_color() -> String { "#7dcfff".to_string() }
-fn default_file_badge_color() -> String { "#9ece6a".to_string() }
-fn default_dir_badge_color() -> String { "#7aa2f7".to_string() }
-fn default_calc_badge_color() -> String { "#bb9af7".to_string() }
 fn default_border_color() -> String { "#3b4261".to_string() }
 fn default_highlight_color() -> String { "#ff9e64".to_string() }
 fn default_true() -> Option<bool> { Some(true) }
@@ -45,10 +33,6 @@ impl Default for ThemeConfig {
             query_color: default_query_color(),
             selection_bg: default_selection_bg(),
             selection_fg: default_selection_fg(),
-            app_badge_color: default_app_badge_color(),
-            file_badge_color: default_file_badge_color(),
-            dir_badge_color: default_dir_badge_color(),
-            calc_badge_color: default_calc_badge_color(),
             border_color: default_border_color(),
             highlight_color: default_highlight_color(),
             show_icons: Some(true),
@@ -60,61 +44,32 @@ impl Default for ThemeConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct SearchPathConfig {
     pub path: String,
-    pub max_depth: Option<usize>,
+    #[serde(default = "default_depth")]
+    pub depth: usize,
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
+
+fn default_depth() -> usize { 2 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SearchConfig {
-    #[serde(default = "default_max_depth")]
-    pub max_depth: usize,
+    #[serde(default = "default_max_results")]
+    pub max_results: usize,
     #[serde(default)]
     pub paths: Vec<SearchPathConfig>,
-    #[serde(default = "default_ignored_dirs")]
-    pub ignored_dirs: Vec<String>,
-    #[serde(default = "default_ignored_extensions")]
-    pub ignored_extensions: Vec<String>,
     #[serde(default = "default_true")]
     pub enable_path_matching: Option<bool>,
-    #[serde(alias = "disable_fcitx", default)]
-    pub disable_ime: Option<bool>,
 }
 
-fn default_max_depth() -> usize { 3 }
-fn default_ignored_dirs() -> Vec<String> {
-    vec![
-        ".git".to_string(),
-        ".cargo".to_string(),
-        ".cache".to_string(),
-        "node_modules".to_string(),
-        "target".to_string(),
-        "build".to_string(),
-        "dist".to_string(),
-        ".venv".to_string(),
-    ]
-}
-fn default_ignored_extensions() -> Vec<String> {
-    vec![
-        ".tmp".to_string(),
-        ".o".to_string(),
-        ".lock".to_string(),
-        ".log".to_string(),
-    ]
-}
+fn default_max_results() -> usize { 50 }
 
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
-            max_depth: default_max_depth(),
-            paths: vec![
-                SearchPathConfig {
-                    path: "~".to_string(),
-                    max_depth: Some(2),
-                }
-            ],
-            ignored_dirs: default_ignored_dirs(),
-            ignored_extensions: default_ignored_extensions(),
+            max_results: default_max_results(),
+            paths: Vec::new(),
             enable_path_matching: Some(true),
-            disable_ime: Some(false),
         }
     }
 }
@@ -123,10 +78,10 @@ impl Default for SearchConfig {
 pub struct CustomAppConfig {
     pub name: String,
     pub exec: String,
-    pub description: Option<String>,
     #[serde(default)]
-    pub terminal: Option<bool>,
+    pub terminal: bool,
     pub icon: Option<String>,
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -162,53 +117,27 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load() -> Self {
-        let mut config = Self::default();
+    pub fn get_config_path() -> PathBuf {
         if let Some(mut config_path) = dirs::config_dir() {
             config_path.push("view-launcher");
             config_path.push("config.toml");
-            
-            if config_path.exists() {
-                if let Ok(content) = fs::read_to_string(&config_path) {
-                    if let Ok(parsed) = toml::from_str::<Config>(&content) {
-                        config = parsed;
-                    }
+            config_path
+        } else {
+            PathBuf::from("config.toml")
+        }
+    }
+
+    pub fn load() -> Self {
+        let mut config = Self::default();
+        let config_path = Self::get_config_path();
+        
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(parsed) = toml::from_str::<Config>(&content) {
+                    config = parsed;
                 }
             }
         }
         config
-    }
-}
-
-pub fn parse_color(s: &str) -> Color {
-    match s.to_lowercase().as_str() {
-        "black" => Color::Black,
-        "red" => Color::Red,
-        "green" => Color::Green,
-        "yellow" => Color::Yellow,
-        "blue" => Color::Blue,
-        "magenta" => Color::Magenta,
-        "cyan" => Color::Cyan,
-        "white" => Color::White,
-        "gray" => Color::Gray,
-        "darkgray" | "dark_gray" => Color::DarkGray,
-        "lightred" | "light_red" => Color::LightRed,
-        "lightgreen" | "light_green" => Color::LightGreen,
-        "lightyellow" | "light_yellow" => Color::LightYellow,
-        "lightblue" | "light_blue" => Color::LightBlue,
-        "lightmagenta" | "light_magenta" => Color::LightMagenta,
-        "lightcyan" | "light_cyan" => Color::LightCyan,
-        hex if hex.starts_with('#') && hex.len() == 7 => {
-            if let (Ok(r), Ok(g), Ok(b)) = (
-                u8::from_str_radix(&hex[1..3], 16),
-                u8::from_str_radix(&hex[3..5], 16),
-                u8::from_str_radix(&hex[5..7], 16),
-            ) {
-                Color::Rgb(r, g, b)
-            } else {
-                Color::Reset
-            }
-        }
-        _ => Color::Reset,
     }
 }

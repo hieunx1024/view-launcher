@@ -36,6 +36,52 @@ pub struct LauncherItem {
     pub icon: Option<String>,
 }
 
+impl LauncherItem {
+    pub fn get_category_tag(&self) -> &'static str {
+        match self.item_type {
+            ItemType::Calc => "Calc",
+            ItemType::Dir => "Folder",
+            ItemType::File => "File",
+            ItemType::App => {
+                let lower = format!("{} {} {}", self.name.to_lowercase(), self.exec_or_path.to_lowercase(), self.icon.as_deref().unwrap_or(""));
+                if lower.contains("idea") || lower.contains("pycharm") || lower.contains("clion") || lower.contains("webstorm") || lower.contains("code") || lower.contains("studio") || lower.contains("nvim") || lower.contains("vim") {
+                    "IDE"
+                } else if lower.contains("dbeaver") || lower.contains("datagrip") || lower.contains("database") || lower.contains("mysql") || lower.contains("postgres") || lower.contains("redis") || lower.contains("mongo") {
+                    "Database"
+                } else if lower.contains("firefox") || lower.contains("chrome") || lower.contains("brave") || lower.contains("edge") || lower.contains("browser") {
+                    "Browser"
+                } else if lower.contains("viber") || lower.contains("telegram") || lower.contains("discord") || lower.contains("slack") || lower.contains("teams") || lower.contains("chat") {
+                    "Chat"
+                } else if lower.contains("spotify") || lower.contains("vlc") || lower.contains("music") || lower.contains("video") || lower.contains("obs") || lower.contains("gimp") || lower.contains("blender") {
+                    "Media"
+                } else if lower.contains("writer") || lower.contains("calc") || lower.contains("office") || lower.contains("word") || lower.contains("excel") || lower.contains("notes") || lower.contains("pdf") {
+                    "Office"
+                } else if lower.contains("terminal") || lower.contains("system") || lower.contains("monitor") || lower.contains("disk") || lower.contains("driver") || lower.contains("setting") || lower.contains("network") {
+                    "System"
+                } else {
+                    "App"
+                }
+            }
+        }
+    }
+}
+
+pub fn open_config_file() {
+    let config_path = crate::config::Config::get_config_path();
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&config_path)
+            .spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(&["/C", "start", "", &config_path.to_string_lossy()])
+            .spawn();
+    }
+}
+
 pub struct LauncherEngine {
     pub apps: Vec<LauncherItem>,
     pub custom_apps: Vec<LauncherItem>,
