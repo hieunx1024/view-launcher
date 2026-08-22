@@ -16,6 +16,7 @@ export component AppWindow inherits Window {
 
     in-out property <string> search_text: "";
     in-out property <int> selected_index: 0;
+    in-out property <length> scroll_viewport_y: 0px;
     in property <[LauncherItemData]> items: [];
     in property <bool> has_results: true;
     in property <string> mode_title: "APPLICATIONS";
@@ -43,6 +44,8 @@ export component AppWindow inherits Window {
     callback open_raw_config();
     callback close_window();
     callback start_window_drag();
+    callback tab_pressed();
+    callback handle_backspace() -> bool;
 
     forward-focus: search_input;
 
@@ -204,6 +207,15 @@ export component AppWindow inherits Window {
                             }
 
                             key-pressed(event) => {
+                                if (event.text == Key.Tab) {
+                                    root.tab_pressed();
+                                    return accept;
+                                }
+                                if (event.text == Key.Backspace) {
+                                    if (root.handle_backspace()) {
+                                        return accept;
+                                    }
+                                }
                                 if (event.text == Key.Escape) {
                                     if (root.in_settings_mode) {
                                         root.close_settings();
@@ -304,7 +316,7 @@ export component AppWindow inherits Window {
                 padding-left: 6px;
                 padding-right: 6px;
                 Text {
-                    text: "💡 Tip: Type expressions like 500*12, 0xFF to decimal, or @f for files";
+                    text: "💡 Tip: Type expressions like 500*12, 0xFF to decimal, or @f for files (Tab into folders)";
                     color: #485173;
                     font-size: 11px;
                     font-italic: true;
@@ -312,7 +324,7 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // 2. ITEM RESULTS LIST (VerticalLayout with 48px item height & 12-14px vertical padding)
+            // 2. SCROLLABLE ITEM RESULTS LIST (Flickable / ListView with Auto-Scroll & 50-Item Capacity)
             list_container := Rectangle {
                 vertical-stretch: 1;
                 clip: true;
@@ -344,128 +356,133 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                // 2.2 Results List
-                VerticalLayout {
+                // 2.2 Scrollable Virtual Container
+                list_flickable := Flickable {
                     visible: root.has_results;
-                    alignment: start;
-                    spacing: 3px;
+                    viewport-y <=> root.scroll_viewport_y;
+                    viewport-height: root.items.length * 51px;
 
-                    for item[index] in root.items : item_row := Rectangle {
-                        height: 48px;
-                        // State Handling: Selected (Keyboard) vs Hover (Mouse) vs Default
-                        background: (index == root.selected_index) ? #262f4d : (item_touch.has-hover ? #1a1e30 : transparent);
-                        border-radius: 10px;
-                        border-width: 1px;
-                        border-color: (index == root.selected_index) ? #3d59a1 : (item_touch.has-hover ? #24293f : transparent);
-                        animate background, border-color { duration: 150ms; easing: ease-out; }
+                    VerticalLayout {
+                        spacing: 3px;
+                        alignment: start;
 
-                        item_touch := TouchArea {
-                            clicked => {
-                                root.selected_index = index;
-                                root.item_activated(index);
+                        for item[index] in root.items : item_row := Rectangle {
+                            height: 48px;
+                            // State Handling: Selected (Keyboard) vs Hover (Mouse) vs Default
+                            background: (index == root.selected_index) ? #262f4d : (item_touch.has-hover ? #1a1e30 : transparent);
+                            border-radius: 10px;
+                            border-width: 1px;
+                            border-color: (index == root.selected_index) ? #3d59a1 : (item_touch.has-hover ? #24293f : transparent);
+                            animate background, border-color { duration: 150ms; easing: ease-out; }
+
+                            item_touch := TouchArea {
+                                clicked => {
+                                    root.selected_index = index;
+                                    root.item_activated(index);
+                                }
                             }
-                        }
 
-                        HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 14px;
-                            padding-top: 6px;
-                            padding-bottom: 6px;
-                            spacing: 12px;
-
-                            // Left Glowing Accent Indicator Pill
                             HorizontalLayout {
-                                alignment: center;
-                                width: 3.5px;
-                                Rectangle {
+                                padding-left: 8px;
+                                padding-right: 14px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                spacing: 12px;
+
+                                // Left Glowing Accent Indicator Pill
+                                HorizontalLayout {
+                                    alignment: center;
                                     width: 3.5px;
-                                    height: 24px;
-                                    border-radius: 2px;
-                                    background: (index == root.selected_index) ? #7dcfff : transparent;
-                                    animate background { duration: 150ms; easing: ease-out; }
+                                    Rectangle {
+                                        width: 3.5px;
+                                        height: 24px;
+                                        border-radius: 2px;
+                                        background: (index == root.selected_index) ? #7dcfff : transparent;
+                                        animate background { duration: 150ms; easing: ease-out; }
+                                    }
                                 }
-                            }
 
-                            // Standardized 32x32px Icon Container with 8px Radius & Solid Fallback Background
-                            HorizontalLayout {
-                                alignment: center;
-                                width: 32px;
-
-                                Rectangle {
+                                // Standardized 32x32px Icon Container with 8px Radius & Solid Fallback Background
+                                HorizontalLayout {
+                                    alignment: center;
                                     width: 32px;
-                                    height: 32px;
-                                    border-radius: 8px;
-                                    background: (item.item_type == "calc") ? #10b98126 : ((item.item_type == "dir") ? #38bdf826 : #1e2338);
-                                    border-width: 1px;
-                                    border-color: (item.item_type == "calc") ? #10b98140 : ((item.item_type == "dir") ? #38bdf840 : #2b324d);
-                                    clip: true;
 
-                                    // Real system icon
-                                    if (root.cfg_show_icons && item.has_icon) : Image {
-                                        source: item.icon;
-                                        width: 26px;
-                                        height: 26px;
-                                        image-fit: contain;
-                                    }
+                                    Rectangle {
+                                        width: 32px;
+                                        height: 32px;
+                                        border-radius: 8px;
+                                        background: (item.item_type == "calc") ? #10b98126 : ((item.item_type == "dir") ? #38bdf826 : #1e2338);
+                                        border-width: 1px;
+                                        border-color: (item.item_type == "calc") ? #10b98140 : ((item.item_type == "dir") ? #38bdf840 : #2b324d);
+                                        clip: true;
 
-                                    // Fallback text/glyph icon
-                                    if (!root.cfg_show_icons || !item.has_icon) : Text {
-                                        text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "📁" : "◆");
-                                        color: (item.item_type == "calc") ? #10b981 : ((item.item_type == "dir") ? #38bdf8 : #7aa2f7);
-                                        font-size: 14px;
-                                        font-weight: 800;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                        // Real system icon
+                                        if (root.cfg_show_icons && item.has_icon) : Image {
+                                            source: item.icon;
+                                            width: 26px;
+                                            height: 26px;
+                                            image-fit: contain;
+                                        }
+
+                                        // Fallback text/glyph icon
+                                        if (!root.cfg_show_icons || !item.has_icon) : Text {
+                                            text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "📁" : "◆");
+                                            color: (item.item_type == "calc") ? #10b981 : ((item.item_type == "dir") ? #38bdf8 : #7aa2f7);
+                                            font-size: 14px;
+                                            font-weight: 800;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
                                     }
                                 }
-                            }
 
-                            // Item Name Title
-                            Text {
-                                text: item.name;
-                                color: (index == root.selected_index) ? #ffffff : #c0caf5;
-                                font-weight: (index == root.selected_index) ? 700 : 500;
-                                font-size: 14px;
-                                horizontal-stretch: 1;
-                                vertical-alignment: center;
-                                overflow: elide;
-                            }
+                                // Item Name Title
+                                Text {
+                                    text: item.name;
+                                    color: (index == root.selected_index) ? #ffffff : #c0caf5;
+                                    font-weight: (index == root.selected_index) ? 700 : 500;
+                                    font-size: 14px;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
 
-                            // Category Tag Badge with Type-Specific WCAG-AA Palette
-                            HorizontalLayout {
-                                alignment: end;
+                                // Category Tag Badge with Type-Specific WCAG-AA Palette
+                                HorizontalLayout {
+                                    alignment: end;
 
-                                // Category Pill Container
-                                Rectangle {
-                                    height: 24px;
-                                    border-radius: 6px;
-                                    border-width: 1px;
+                                    // Category Pill Container
+                                    Rectangle {
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        border-width: 1px;
 
-                                    // Background: 10% Opacity per Category
-                                    background: (item.category == "Chat") ? #34D3991A :
-                                                ((item.category == "System" || item.category == "Folder") ? #FBBF241A :
-                                                ((item.category == "IDE" || item.category == "Development") ? #A78BFA1A :
-                                                ((item.category == "Calc") ? #10B9811A : #38BDF81A)));
+                                        // Background: 10% Opacity per Category
+                                        background: (item.category == "Chat") ? #34D3991A :
+                                                    ((item.category == "System" || item.category == "Folder") ? #FBBF241A :
+                                                    ((item.category == "IDE" || item.category == "Development") ? #A78BFA1A :
+                                                    ((item.category == "Calc") ? #10B9811A : #38BDF81A)));
 
-                                    // Border: Accent Color per Category
-                                    border-color: (item.category == "Chat") ? #34D39940 :
-                                                  ((item.category == "System" || item.category == "Folder") ? #FBBF2440 :
-                                                  ((item.category == "IDE" || item.category == "Development") ? #A78BFA40 :
-                                                  ((item.category == "Calc") ? #10B98140 : #38BDF840)));
+                                        // Border: Accent Color per Category
+                                        border-color: (item.category == "Chat") ? #34D39940 :
+                                                      ((item.category == "System" || item.category == "Folder") ? #FBBF2440 :
+                                                      ((item.category == "IDE" || item.category == "Development") ? #A78BFA40 :
+                                                      ((item.category == "Calc") ? #10B98140 : #38BDF840)));
 
-                                    HorizontalLayout {
-                                        padding-left: 9px;
-                                        padding-right: 9px;
-                                        Text {
-                                            text: item.category;
-                                            // Text Color per Category
-                                            color: (item.category == "Chat") ? #34D399 :
-                                                   ((item.category == "System" || item.category == "Folder") ? #FBBF24 :
-                                                   ((item.category == "IDE" || item.category == "Development") ? #A78BFA :
-                                                   ((item.category == "Calc") ? #10B981 : #38BDF8)));
-                                            font-size: 11px;
-                                            font-weight: 700;
-                                            vertical-alignment: center;
+                                        HorizontalLayout {
+                                            padding-left: 9px;
+                                            padding-right: 9px;
+                                            Text {
+                                                text: item.category;
+                                                // Text Color per Category
+                                                color: (item.category == "Chat") ? #34D399 :
+                                                       ((item.category == "System" || item.category == "Folder") ? #FBBF24 :
+                                                       ((item.category == "IDE" || item.category == "Development") ? #A78BFA :
+                                                       ((item.category == "Calc") ? #10B981 : #38BDF8)));
+                                                font-size: 11px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
                                         }
                                     }
                                 }
@@ -509,6 +526,24 @@ export component AppWindow inherits Window {
                                 }
                             }
                             Text { text: "Navigate"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                        }
+
+                        // Tab In
+                        if root.is_file_mode : HorizontalLayout {
+                            spacing: 5px;
+                            Rectangle {
+                                background: #1b1e2e;
+                                border-radius: 4px;
+                                height: 19px;
+                                border-width: 1px;
+                                border-color: #323854;
+                                HorizontalLayout {
+                                    padding-left: 5px;
+                                    padding-right: 5px;
+                                    Text { text: "Tab"; color: #2ac3de; font-weight: 800; font-size: 11px; vertical-alignment: center; }
+                                }
+                            }
+                            Text { text: "Enter Folder"; color: #787c99; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                         }
 
                         // ↵ Open

@@ -115,8 +115,8 @@ fn populate_items(
     let mut current_items = Vec::new();
     let mut slint_items = Vec::new();
 
-    let limit = (ui.get_cfg_max_results() as usize).clamp(4, 10);
-    for (item, _indices) in results.into_iter().take(limit) {
+    const MAX_COMPUTE_RESULTS: usize = 50;
+    for (item, _indices) in results.into_iter().take(MAX_COMPUTE_RESULTS) {
         let (slint_icon, category) = match item.item_type {
             launcher::ItemType::App => {
                 let icon = icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
@@ -166,6 +166,19 @@ fn populate_items(
     current_items
 }
 
+fn ensure_selection_visible(ui: &AppWindow, selected_index: i32) {
+    let item_h: f32 = 51.0;
+    let sel = selected_index as f32;
+    let max_v = ui.get_cfg_max_results().clamp(4, 10) as f32;
+    let cur_offset = -ui.get_scroll_viewport_y() / item_h;
+    
+    if sel < cur_offset {
+        ui.set_scroll_viewport_y(-sel * item_h);
+    } else if sel >= cur_offset + max_v {
+        ui.set_scroll_viewport_y(-(sel - max_v + 1.0) * item_h);
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let exit_trigger = Arc::new(AtomicBool::new(false));
 
@@ -185,10 +198,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_cfg_max_results(config.search.max_results as i32);
     ui.set_cfg_max_depth(config.search.max_depth as i32);
 
+    // 4. Initial Population
     let engine = Arc::new(LauncherEngine::new(config));
     let icon_resolver = Arc::new(IconResolver::new());
-
-    // 4. Initial Population
     let current_results = Arc::new(std::sync::RwLock::new(populate_items(
         &ui,
         &engine,
@@ -213,11 +225,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *lock = items;
                 }
                 ui.set_selected_index(0);
+                ui.set_scroll_viewport_y(0.0);
             }
         });
     }
 
-    // 5.1 Connect Move Up
+    // 5.1 Connect Move Up with Auto-Scroll
     {
         let ui_weak = ui.as_weak();
         let current_results = current_results.clone();
@@ -232,11 +245,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let cur = ui.get_selected_index();
                 let next = if cur <= 0 { total - 1 } else { cur - 1 };
                 ui.set_selected_index(next);
+                ensure_selection_visible(&ui, next);
             }
         });
     }
 
-    // 5.2 Connect Move Down
+    // 5.2 Connect Move Down with Auto-Scroll
     {
         let ui_weak = ui.as_weak();
         let current_results = current_results.clone();
@@ -251,7 +265,92 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let cur = ui.get_selected_index();
                 let next = if cur + 1 >= total { 0 } else { cur + 1 };
                 ui.set_selected_index(next);
+                ensure_selection_visible(&ui, next);
             }
+        });
+    }
+
+    // 5.3 Connect Tab Pressed (Navigate Into Directory)
+    {
+        let engine = engine.clone();
+        let icon_resolver = icon_resolver.clone();
+        let current_results = current_results.clone();
+        let ui_weak = ui.as_weak();
+
+        ui.on_tab_pressed(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let search_text = ui.get_search_text().to_string();
+                let is_file_mode = search_text.starts_with("@f") || search_text.starts_with("@file");
+                if is_file_mode {
+                    let sel_idx = ui.get_selected_index() as usize;
+                    let item_opt = {
+                        if let Ok(lock) = current_results.read() {
+                            lock.get(sel_idx).cloned()
+                        } else {
+                            None
+                        }
+                    };
+
+                    if let Some(item) = item_opt {
+                        if item.item_type == launcher::ItemType::Dir {
+                            let mut path = item.exec_or_path;
+                            if !path.ends_with('/') {
+                                path.push('/');
+                            }
+                            let new_search_text = format!("@f {}", path);
+                            ui.set_search_text(new_search_text.clone().into());
+                            let items = populate_items(&ui, &engine, &icon_resolver, &new_search_text);
+                            if let Ok(mut lock) = current_results.write() {
+                                *lock = items;
+                            }
+                            ui.set_selected_index(0);
+                            ui.set_scroll_viewport_y(0.0);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 5.4 Connect Handle Backspace (Step Out to Parent Directory)
+    {
+        let engine = engine.clone();
+        let icon_resolver = icon_resolver.clone();
+        let current_results = current_results.clone();
+        let ui_weak = ui.as_weak();
+
+        ui.on_handle_backspace(move || -> bool {
+            if let Some(ui) = ui_weak.upgrade() {
+                let search_text = ui.get_search_text().to_string();
+                if (search_text.starts_with("@f ") || search_text.starts_with("@file ")) && search_text.ends_with('/') {
+                    let prefix_len = if search_text.starts_with("@file ") { 6 } else { 3 };
+                    let path_part = &search_text[prefix_len..];
+                    let trimmed_path = path_part.trim_end_matches('/');
+                    if let Some(pos) = trimmed_path.rfind('/') {
+                        let parent_path = &trimmed_path[..=pos];
+                        let new_search_text = format!("{}{}", &search_text[..prefix_len], parent_path);
+                        ui.set_search_text(new_search_text.clone().into());
+                        let items = populate_items(&ui, &engine, &icon_resolver, &new_search_text);
+                        if let Ok(mut lock) = current_results.write() {
+                            *lock = items;
+                        }
+                        ui.set_selected_index(0);
+                        ui.set_scroll_viewport_y(0.0);
+                        return true;
+                    } else {
+                        let new_search_text = format!("{}", &search_text[..prefix_len]);
+                        ui.set_search_text(new_search_text.clone().into());
+                        let items = populate_items(&ui, &engine, &icon_resolver, &new_search_text);
+                        if let Ok(mut lock) = current_results.write() {
+                            *lock = items;
+                        }
+                        ui.set_selected_index(0);
+                        ui.set_scroll_viewport_y(0.0);
+                        return true;
+                    }
+                }
+            }
+            false
         });
     }
 

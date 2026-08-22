@@ -453,30 +453,39 @@ impl LauncherEngine {
 
     /// Scans a specific directory on-the-fly for quick sub-folder traversal.
     pub fn scan_dir_on_the_fly(&self, dir: &Path) -> Vec<LauncherItem> {
-        let mut items = Vec::new();
+        let mut dirs = Vec::new();
+        let mut files = Vec::new();
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 let name = entry.file_name().to_string_lossy().to_string();
                 let path_str = path.to_string_lossy().to_string();
                 
-                let item_type = if path.is_dir() {
-                    ItemType::Dir
+                if path.is_dir() {
+                    dirs.push(LauncherItem {
+                        name,
+                        exec_or_path: path_str,
+                        item_type: ItemType::Dir,
+                        description: Some(dir.to_string_lossy().to_string()),
+                        terminal: false,
+                        icon: None,
+                    });
                 } else {
-                    ItemType::File
-                };
-
-                items.push(LauncherItem {
-                    name,
-                    exec_or_path: path_str,
-                    item_type,
-                    description: Some(dir.to_string_lossy().to_string()),
-                    terminal: false,
-                    icon: None,
-                });
+                    files.push(LauncherItem {
+                        name,
+                        exec_or_path: path_str,
+                        item_type: ItemType::File,
+                        description: Some(dir.to_string_lossy().to_string()),
+                        terminal: false,
+                        icon: None,
+                    });
+                }
             }
         }
-        items
+        dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        dirs.extend(files);
+        dirs
     }
 
     /// Performs high-performance fuzzy matching and ranking of items.
