@@ -23,10 +23,12 @@ export component AppWindow inherits Window {
     in property <bool> is_file_mode: false;
     in property <string> status_item_count: "0 apps";
 
-    // Action Icons
+    // Action Vector Icons (No missing font emoji dependencies)
     in property <image> settings_icon;
     in property <image> nav_icon;
     in property <image> enter_icon;
+    in property <image> search_icon;
+    in property <image> bulb_icon;
 
     // In-App Settings State
     in-out property <bool> in_settings_mode: false;
@@ -166,13 +168,15 @@ export component AppWindow inherits Window {
                     padding-right: 14px;
                     spacing: 12px;
 
-                    // 1.1 Fixed Search Icon (Kính lúp)
+                    // 1.1 Fixed Vector Search Icon (Crisp SVG)
                     HorizontalLayout {
                         alignment: center;
-                        width: 22px;
-                        Text {
-                            text: root.is_file_mode ? "📂" : "🔍";
-                            font-size: 16px;
+                        width: 20px;
+                        Image {
+                            source: root.search_icon;
+                            width: 18px;
+                            height: 18px;
+                            image-fit: contain;
                             vertical-alignment: center;
                             horizontal-alignment: center;
                         }
@@ -312,13 +316,24 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // 1.4 Subtle Quick Calc Hint (Beneath Search Box)
+            // 1.4 Subtle Quick Tip with Vector Bulb Icon (Beneath Search Box)
             if root.search_text == "" : HorizontalLayout {
-                padding-left: 6px;
-                padding-right: 6px;
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: start;
+
+                Image {
+                    source: root.bulb_icon;
+                    width: 13px;
+                    height: 13px;
+                    image-fit: contain;
+                    vertical-alignment: center;
+                }
+
                 Text {
-                    text: "💡 Tip: Type expressions like 500*12, 0xFF to decimal, or @f for files (Tab into folders)";
-                    color: #485173;
+                    text: "Tip: Type math (500*12), hex (0xFF), or @f for file search (Tab to enter folders)";
+                    color: #565f89;
                     font-size: 11px;
                     font-italic: true;
                     vertical-alignment: center;
@@ -336,9 +351,11 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         alignment: center;
                         spacing: 8px;
-                        Text {
-                            text: "🔍";
-                            font-size: 32px;
+                        Image {
+                            source: root.search_icon;
+                            width: 36px;
+                            height: 36px;
+                            image-fit: contain;
                             horizontal-alignment: center;
                         }
                         Text {

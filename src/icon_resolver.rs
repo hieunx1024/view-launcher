@@ -15,6 +15,8 @@ const SVG_GENERIC: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http:/
 const SVG_GEAR: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3" stroke="#7DCFFF" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="#7DCFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>"##;
 const SVG_NAVIGATE: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4L6 10H18L12 4Z" fill="#7AA2F7"/><path d="M12 20L6 14H18L12 20Z" fill="#7AA2F7"/></svg>"##;
 const SVG_ENTER: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 6V13C19 14.1 18.1 15 17 15H6M6 15L10 11M6 15L10 19" stroke="#7AA2F7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>"##;
+const SVG_SEARCH: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="7" stroke="#7AA2F7" stroke-width="2.2"/><path d="M20 20L16 16" stroke="#7AA2F7" stroke-width="2.2" stroke-linecap="round"/></svg>"##;
+const SVG_BULB: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 21h6M10 17h4M12 3a6 6 0 00-6 6c0 2.2 1.2 4.2 3 5.2V16a1 1 0 001 1h4a1 1 0 001-1v-1.8c1.8-1 3-3 3-5.2a6 6 0 00-6-6z" stroke="#FBBF24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>"##;
 
 /// High-performance thread-safe icon resolver with O(1) in-memory index and pre-decoding cache.
 pub struct IconResolver {
@@ -134,6 +136,14 @@ impl IconResolver {
 
     pub fn get_enter_icon(&self) -> slint::Image {
         Self::rasterize_svg_bytes(SVG_ENTER.as_bytes(), 14).unwrap_or_default()
+    }
+
+    pub fn get_search_icon(&self) -> slint::Image {
+        Self::rasterize_svg_bytes(SVG_SEARCH.as_bytes(), 18).unwrap_or_default()
+    }
+
+    pub fn get_bulb_icon(&self) -> slint::Image {
+        Self::rasterize_svg_bytes(SVG_BULB.as_bytes(), 14).unwrap_or_default()
     }
 
     pub fn rasterize_svg_bytes(svg_data: &[u8], size_px: u32) -> Option<slint::Image> {
