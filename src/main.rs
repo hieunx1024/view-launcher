@@ -206,10 +206,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_nav_icon(icon_resolver.get_nav_icon());
     ui.set_enter_icon(icon_resolver.get_enter_icon());
 
-    // Window properties
-    ui.window().with_winit_window(|winit_window| {
+    // Window properties & Icon
+    let app_icon_opt = image::load_from_memory(include_bytes!("../assets/view-launcher.png"))
+        .ok()
+        .and_then(|img| {
+            let rgba = img.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            i_slint_backend_winit::winit::window::Icon::from_rgba(rgba.into_raw(), width, height).ok()
+        });
+
+    ui.window().with_winit_window(move |winit_window| {
         winit_window.set_transparent(true);
         winit_window.set_decorations(false);
+        if let Some(icon) = app_icon_opt {
+            winit_window.set_window_icon(Some(icon));
+        }
     });
 
     // 4. Initial Population
