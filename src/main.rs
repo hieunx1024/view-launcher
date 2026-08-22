@@ -443,9 +443,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let ui_weak = ui.as_weak();
         ui.on_open_config(move || {
+            let start = std::time::Instant::now();
+            if std::env::var("VIEW_LAUNCHER_DEBUG").is_ok() || std::env::var("RUST_LOG").is_ok() {
+                eprintln!("[DEBUG] on_open_config ENTER at {:?}", start);
+            }
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_in_settings_mode(true);
                 ui.set_settings_status("".into());
+                ui.invoke_focus_settings();
+            }
+            if std::env::var("VIEW_LAUNCHER_DEBUG").is_ok() || std::env::var("RUST_LOG").is_ok() {
+                eprintln!("[DEBUG] on_open_config EXIT in {:?}", start.elapsed());
             }
         });
     }
@@ -454,8 +462,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let ui_weak = ui.as_weak();
         ui.on_close_settings(move || {
+            let start = std::time::Instant::now();
+            if std::env::var("VIEW_LAUNCHER_DEBUG").is_ok() || std::env::var("RUST_LOG").is_ok() {
+                eprintln!("[DEBUG] on_close_settings ENTER at {:?}", start);
+            }
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_in_settings_mode(false);
+                ui.invoke_focus_search();
+            }
+            if std::env::var("VIEW_LAUNCHER_DEBUG").is_ok() || std::env::var("RUST_LOG").is_ok() {
+                eprintln!("[DEBUG] on_close_settings EXIT in {:?}", start.elapsed());
             }
         });
     }
