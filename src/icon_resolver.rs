@@ -85,7 +85,7 @@ impl IconResolver {
 
         // 2. Fast O(1) Path Lookup
         let resolved_path = self.find_icon_path(icon_hint, app_name, exec_or_path);
-        let slint_img = resolved_path.and_then(|p| slint::Image::load_from_path(&p).ok());
+        let slint_img = resolved_path.and_then(|p| Self::load_downscaled_icon(&p));
 
         // 3. Store in cache
         if let Ok(mut guard) = self.image_cache.write() {
@@ -93,6 +93,62 @@ impl IconResolver {
         }
 
         slint_img
+    }
+
+    fn load_downscaled_icon(path: &Path) -> Option<slint::Image> {
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            if ext.eq_ignore_ascii_case("svg") {
+                if let Some(img) = Self::rasterize_svg(path) {
+                    return Some(img);
+                }
+            }
+        }
+
+        if let Ok(dyn_img) = image::open(path) {
+            let thumb = dyn_img.thumbnail(48, 48).to_rgba8();
+            let (w, h) = thumb.dimensions();
+            let mut pixel_buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(w, h);
+            let raw_slice = thumb.into_raw();
+            
+            let dest = pixel_buf.make_mut_slice();
+            for (src_chunk, dest_pixel) in raw_slice.chunks_exact(4).zip(dest.iter_mut()) {
+                *dest_pixel = slint::Rgba8Pixel {
+                    r: src_chunk[0],
+                    g: src_chunk[1],
+                    b: src_chunk[2],
+                    a: src_chunk[3],
+                };
+            }
+            return Some(slint::Image::from_rgba8(pixel_buf));
+        }
+
+        None
+    }
+
+    fn rasterize_svg(path: &Path) -> Option<slint::Image> {
+        let svg_data = std::fs::read(path).ok()?;
+        let opt = usvg::Options::default();
+        let tree = usvg::Tree::from_data(&svg_data, &opt).ok()?;
+        let mut pixmap = tiny_skia::Pixmap::new(48, 48)?;
+        let size = tree.size();
+        let sx = 48.0 / size.width();
+        let sy = 48.0 / size.height();
+        let scale = sx.min(sy);
+        let transform = tiny_skia::Transform::from_scale(scale, scale);
+        resvg::render(&tree, transform, &mut pixmap.as_mut());
+        
+        let mut pixel_buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(48, 48);
+        let raw_slice = pixmap.data();
+        let dest = pixel_buf.make_mut_slice();
+        for (src_chunk, dest_pixel) in raw_slice.chunks_exact(4).zip(dest.iter_mut()) {
+            *dest_pixel = slint::Rgba8Pixel {
+                r: src_chunk[0],
+                g: src_chunk[1],
+                b: src_chunk[2],
+                a: src_chunk[3],
+            };
+        }
+        Some(slint::Image::from_rgba8(pixel_buf))
     }
 
     fn find_icon_path(&self, icon_hint: Option<&str>, app_name: &str, exec_or_path: &str) -> Option<PathBuf> {
