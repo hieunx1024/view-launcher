@@ -47,708 +47,673 @@ export component AppWindow inherits Window {
     callback close_window();
     callback start_window_drag();
 
-    forward-focus: focus_scope;
+    forward-focus: search_input;
 
-    focus_scope := FocusScope {
-        key-pressed(event) => {
-            if (event.text == Key.Escape) {
-                if (root.in_settings_mode) {
-                    root.close_settings();
-                    return accept;
-                }
-                root.close_window();
-                return accept;
-            }
-            if (root.in_settings_mode) {
-                return reject;
-            }
-            if (event.text == Key.Return) {
-                root.item_activated(root.selected_index);
-                return accept;
-            }
-            if (event.text == Key.DownArrow) {
-                root.move_down();
-                return accept;
-            }
-            if (event.text == Key.UpArrow) {
-                root.move_up();
-                return accept;
-            }
-            if (event.modifiers.control && event.text == ",") {
-                root.open_config();
-                return accept;
-            }
-            if (event.modifiers.alt && (event.text == "t" || event.text == "T")) {
-                root.open_in_terminal(root.selected_index);
-                return accept;
-            }
-            if (event.modifiers.alt && (event.text == "c" || event.text == "C")) {
-                root.copy_path(root.selected_index);
-                return accept;
-            }
-            return reject;
-        }
+    // Main Card Container with rounded corners & Tokyo Night dark palette
+    main_card := Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #1a1b26;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: #3b4261;
+        clip: true;
 
-        // Main Card Container with rounded corners & Tokyo Night dark palette
-        main_card := Rectangle {
-            width: 100%;
-            height: 100%;
-            background: #1a1b26;
-            border-radius: 14px;
-            border-width: 1px;
-            border-color: #3b4261;
-            clip: true;
+        // ==========================================
+        // VIEW 1: SEARCH & LAUNCHER VIEW
+        // ==========================================
+        search_view := VerticalLayout {
+            visible: !root.in_settings_mode;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 12px;
+            padding-bottom: 10px;
+            spacing: 10px;
 
-            // ==========================================
-            // VIEW 1: SEARCH & LAUNCHER VIEW
-            // ==========================================
-            if !root.in_settings_mode : VerticalLayout {
-                padding-left: 14px;
-                padding-right: 14px;
-                padding-top: 12px;
-                padding-bottom: 10px;
-                spacing: 10px;
+            // 1. Top Header Bar (Native Window Drag Area)
+            header_bar := Rectangle {
+                height: 24px;
 
-                // 1. Top Header Bar (Native Window Drag Area)
-                header_bar := Rectangle {
-                    height: 24px;
-
-                    TouchArea {
-                        pointer-event(event) => {
-                            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
-                                root.start_window_drag();
-                            }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        HorizontalLayout {
-                            spacing: 6px;
-                            alignment: start;
-                            Text {
-                                text: root.mode_icon;
-                                color: root.is_file_mode ? #2ac3de : #7aa2f7;
-                                font-size: 14px;
-                                font-weight: 700;
-                                vertical-alignment: center;
-                            }
-                            Text {
-                                text: root.mode_title;
-                                color: root.is_file_mode ? #2ac3de : #7aa2f7;
-                                font-size: 12px;
-                                font-weight: 700;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        HorizontalLayout {
-                            alignment: end;
-                            spacing: 12px;
-
-                            Text {
-                                text: root.status_item_count;
-                                color: #565f89;
-                                font-size: 12px;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-
-                            // Quick Settings Cog button
-                            settings_btn := Rectangle {
-                                width: 22px;
-                                height: 22px;
-                                border-radius: 4px;
-                                background: settings_touch.has-hover ? #24283b : transparent;
-
-                                settings_touch := TouchArea {
-                                    clicked => {
-                                        root.open_config();
-                                    }
-                                }
-
-                                Text {
-                                    text: "⚙";
-                                    color: settings_touch.has-hover ? #7aa2f7 : #565f89;
-                                    font-size: 14px;
-                                    vertical-alignment: center;
-                                    horizontal-alignment: center;
-                                }
-                            }
+                TouchArea {
+                    pointer-event(event) => {
+                        if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                            root.start_window_drag();
                         }
                     }
                 }
 
-                // 2. Search Box
-                search_box := Rectangle {
-                    height: 44px;
-                    background: #24283b;
-                    border-radius: 8px;
-                    border-width: 1px;
-                    border-color: root.is_file_mode ? #2ac3de : #414868;
-
-                    HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 10px;
-
-                        // Search lens / Folder glyph
-                        Text {
-                            text: root.is_file_mode ? "󰉋" : "󰍉";
-                            color: root.is_file_mode ? #2ac3de : #7dcfff;
-                            font-size: 18px;
-                            font-weight: 700;
-                            vertical-alignment: center;
-                        }
-
-                        // Input Field with Stable Static Placeholder
-                        Rectangle {
-                            horizontal-stretch: 1;
-
-                            Text {
-                                text: root.is_file_mode ? "Type to search files (e.g. @f notes.pdf)..." : "Search apps, type @f for files, or 500*12...";
-                                color: #565f89;
-                                font-size: 14px;
-                                font-italic: true;
-                                vertical-alignment: center;
-                                visible: root.search_text == "";
-                            }
-
-                            search_input := TextInput {
-                                text <=> root.search_text;
-                                font-size: 15px;
-                                color: #f0f6fc;
-                                selection-background-color: #3b4261;
-                                selection-foreground-color: #ffffff;
-                                vertical-alignment: center;
-
-                                edited => {
-                                    root.search_text_changed(self.text);
-                                }
-
-                                key-pressed(event) => {
-                                    if (event.text == Key.Escape) {
-                                        root.close_window();
-                                        return accept;
-                                    }
-                                    if (event.text == Key.Return) {
-                                        root.item_activated(root.selected_index);
-                                        return accept;
-                                    }
-                                    if (event.text == Key.DownArrow) {
-                                        root.move_down();
-                                        return accept;
-                                    }
-                                    if (event.text == Key.UpArrow) {
-                                        root.move_up();
-                                        return accept;
-                                    }
-                                    if (event.modifiers.control && event.text == ",") {
-                                        root.open_config();
-                                        return accept;
-                                    }
-                                    if (event.modifiers.alt && (event.text == "t" || event.text == "T")) {
-                                        root.open_in_terminal(root.selected_index);
-                                        return accept;
-                                    }
-                                    if (event.modifiers.alt && (event.text == "c" || event.text == "C")) {
-                                        root.copy_path(root.selected_index);
-                                        return accept;
-                                    }
-                                    return reject;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3. Item Results List
-                list_container := Rectangle {
-                    vertical-stretch: 1;
-                    clip: true;
-
-                    Rectangle {
-                        visible: !root.has_results;
-                        VerticalLayout {
-                            alignment: center;
-                            spacing: 8px;
-                            Text {
-                                text: "󰋔";
-                                font-size: 32px;
-                                color: #414868;
-                                horizontal-alignment: center;
-                            }
-                            Text {
-                                text: "No matching applications, files, or calculations found.";
-                                font-size: 13px;
-                                color: #565f89;
-                                horizontal-alignment: center;
-                            }
-                        }
-                    }
-
-                    ListView {
-                        visible: root.has_results;
-                        for item[index] in root.items : item_row := Rectangle {
-                            height: 42px;
-                            background: (index == root.selected_index) ? #283457 : (item_touch.has-hover ? #1f2335 : transparent);
-                            border-radius: 6px;
-
-                            item_touch := TouchArea {
-                                clicked => {
-                                    root.selected_index = index;
-                                    root.item_activated(index);
-                                }
-                            }
-
-                            HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 12px;
-                                spacing: 12px;
-
-                                // Left Side: Selection indicator + App Icon + Item Name
-                                HorizontalLayout {
-                                    spacing: 10px;
-                                    alignment: start;
-                                    horizontal-stretch: 1;
-
-                                    // Active selection vertical pill
-                                    HorizontalLayout {
-                                        alignment: center;
-                                        width: 3px;
-                                        Rectangle {
-                                            width: 3px;
-                                            height: 18px;
-                                            border-radius: 2px;
-                                            background: (index == root.selected_index) ? #7dcfff : transparent;
-                                        }
-                                    }
-
-                                    // Real System Icon Image
-                                    if item.has_icon : HorizontalLayout {
-                                        alignment: center;
-                                        width: 24px;
-                                        Image {
-                                            source: item.icon;
-                                            width: 24px;
-                                            height: 24px;
-                                            image-fit: contain;
-                                        }
-                                    }
-
-                                    // Fallback icon when no image
-                                    if !item.has_icon : Text {
-                                        text: (item.item_type == "dir") ? "" : (item.item_type == "calc" ? "󰃬" : "󰀻");
-                                        color: (item.item_type == "calc") ? #9ece6a : (item.item_type == "dir" ? #7aa2f7 : #7dcfff);
-                                        font-size: 18px;
-                                        vertical-alignment: center;
-                                    }
-
-                                    // Item Name
-                                    Text {
-                                        text: item.name;
-                                        color: (index == root.selected_index) ? #ffffff : #c0caf5;
-                                        font-weight: (index == root.selected_index) ? 700 : 500;
-                                        font-size: 14px;
-                                        vertical-alignment: center;
-                                        overflow: elide;
-                                    }
-                                }
-
-                                // Right Side: Category Badge / Path preview
-                                HorizontalLayout {
-                                    alignment: end;
-                                    Rectangle {
-                                        background: (index == root.selected_index) ? #1f2335 : #24283b;
-                                        border-radius: 4px;
-                                        height: 22px;
-                                        border-width: 1px;
-                                        border-color: (index == root.selected_index) ? #3b4261 : #292e42;
-
-                                        HorizontalLayout {
-                                            padding-left: 8px;
-                                            padding-right: 8px;
-                                            Text {
-                                                text: item.category;
-                                                color: (index == root.selected_index) ? #7dcfff : #7aa2f7;
-                                                font-size: 11px;
-                                                font-weight: 600;
-                                                vertical-alignment: center;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Divider line above footer
-                Rectangle {
-                    height: 1px;
-                    background: #292e42;
-                }
-
-                // 4. Clean Footer Status Bar
-                if root.cfg_show_status_bar : footer := Rectangle {
-                    height: 26px;
-
-                    HorizontalLayout {
-                        alignment: center;
-                        spacing: 16px;
-
-                        HorizontalLayout {
-                            spacing: 4px;
-                            Text { text: "[Enter]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                            Text { text: "Open"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                        }
-
-                        Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
-
-                        HorizontalLayout {
-                            spacing: 4px;
-                            Text { text: "[Tab]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                            Text { text: "Complete"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                        }
-
-                        Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
-
-                        HorizontalLayout {
-                            spacing: 4px;
-                            Text { text: "[Alt+T]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                            Text { text: "Terminal"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                        }
-
-                        Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
-
-                        HorizontalLayout {
-                            spacing: 4px;
-                            Text { text: "[Ctrl+,]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                            Text { text: "Settings"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                        }
-
-                        Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
-
-                        HorizontalLayout {
-                            spacing: 4px;
-                            Text { text: "[Esc]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
-                            Text { text: "Quit"; color: #565f89; font-size: 11px; vertical-alignment: center; }
-                        }
-                    }
-                }
-            }
-
-            // ==========================================
-            // VIEW 2: IN-APP GUI SETTINGS & CONFIG VIEW
-            // ==========================================
-            if root.in_settings_mode : VerticalLayout {
-                padding-left: 20px;
-                padding-right: 20px;
-                padding-top: 14px;
-                padding-bottom: 14px;
-                spacing: 12px;
-
-                // 1. Settings Header Bar
                 HorizontalLayout {
-                    height: 28px;
-                    alignment: space-between;
-
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: 6px;
                         alignment: start;
                         Text {
-                            text: "⚙";
-                            color: #7aa2f7;
-                            font-size: 16px;
+                            text: root.mode_icon;
+                            color: root.is_file_mode ? #2ac3de : #7aa2f7;
+                            font-size: 14px;
                             font-weight: 700;
                             vertical-alignment: center;
                         }
                         Text {
-                            text: "VIEW LAUNCHER CONFIGURATION";
-                            color: #ffffff;
+                            text: root.mode_title;
+                            color: root.is_file_mode ? #2ac3de : #7aa2f7;
+                            font-size: 12px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 12px;
+
+                        Text {
+                            text: root.status_item_count;
+                            color: #565f89;
+                            font-size: 12px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+
+                        // Quick Settings Cog button
+                        settings_btn := Rectangle {
+                            width: 22px;
+                            height: 22px;
+                            border-radius: 4px;
+                            background: settings_touch.has-hover ? #24283b : transparent;
+
+                            settings_touch := TouchArea {
+                                clicked => {
+                                    root.open_config();
+                                }
+                            }
+
+                            Text {
+                                text: "⚙";
+                                color: settings_touch.has-hover ? #7aa2f7 : #565f89;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Search Box
+            search_box := Rectangle {
+                height: 44px;
+                background: #24283b;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: root.is_file_mode ? #2ac3de : #414868;
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 10px;
+
+                    // Search lens / Folder glyph
+                    Text {
+                        text: root.is_file_mode ? "󰉋" : "󰍉";
+                        color: root.is_file_mode ? #2ac3de : #7dcfff;
+                        font-size: 18px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    // Input Field with Stable Static Placeholder
+                    Rectangle {
+                        horizontal-stretch: 1;
+
+                        Text {
+                            text: root.is_file_mode ? "Type to search files (e.g. @f notes.pdf)..." : "Search apps, type @f for files, or 500*12...";
+                            color: #565f89;
+                            font-size: 14px;
+                            font-italic: true;
+                            vertical-alignment: center;
+                            visible: root.search_text == "";
+                        }
+
+                        search_input := TextInput {
+                            text <=> root.search_text;
+                            font-size: 15px;
+                            color: #f0f6fc;
+                            selection-background-color: #3b4261;
+                            selection-foreground-color: #ffffff;
+                            vertical-alignment: center;
+
+                            edited => {
+                                root.search_text_changed(self.text);
+                            }
+
+                            key-pressed(event) => {
+                                if (event.text == Key.Escape) {
+                                    if (root.in_settings_mode) {
+                                        root.close_settings();
+                                        return accept;
+                                    }
+                                    root.close_window();
+                                    return accept;
+                                }
+                                if (event.text == Key.Return) {
+                                    root.item_activated(root.selected_index);
+                                    return accept;
+                                }
+                                if (event.text == Key.DownArrow) {
+                                    root.move_down();
+                                    return accept;
+                                }
+                                if (event.text == Key.UpArrow) {
+                                    root.move_up();
+                                    return accept;
+                                }
+                                if (event.modifiers.control && event.text == ",") {
+                                    root.open_config();
+                                    return accept;
+                                }
+                                if (event.modifiers.alt && (event.text == "t" || event.text == "T")) {
+                                    root.open_in_terminal(root.selected_index);
+                                    return accept;
+                                }
+                                if (event.modifiers.alt && (event.text == "c" || event.text == "C")) {
+                                    root.copy_path(root.selected_index);
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Item Results List
+            list_container := Rectangle {
+                vertical-stretch: 1;
+                clip: true;
+
+                Rectangle {
+                    visible: !root.has_results;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 8px;
+                        Text {
+                            text: "󰋔";
+                            font-size: 32px;
+                            color: #414868;
+                            horizontal-alignment: center;
+                        }
+                        Text {
+                            text: "No matching applications, files, or calculations found.";
+                            font-size: 13px;
+                            color: #565f89;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                ListView {
+                    visible: root.has_results;
+                    for item[index] in root.items : item_row := Rectangle {
+                        height: 42px;
+                        background: (index == root.selected_index) ? #283457 : (item_touch.has-hover ? #1f2335 : transparent);
+                        border-radius: 6px;
+
+                        item_touch := TouchArea {
+                            clicked => {
+                                root.selected_index = index;
+                                root.item_activated(index);
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 12px;
+                            spacing: 12px;
+
+                            // Left Side: Selection indicator + App Icon + Item Name
+                            HorizontalLayout {
+                                spacing: 10px;
+                                alignment: start;
+                                horizontal-stretch: 1;
+
+                                // Active selection vertical pill
+                                HorizontalLayout {
+                                    alignment: center;
+                                    width: 3px;
+                                    Rectangle {
+                                        width: 3px;
+                                        height: 18px;
+                                        border-radius: 2px;
+                                        background: (index == root.selected_index) ? #7dcfff : transparent;
+                                    }
+                                }
+
+                                // Real System Icon Image
+                                if (root.cfg_show_icons && item.has_icon) : HorizontalLayout {
+                                    alignment: center;
+                                    width: 24px;
+                                    Image {
+                                        source: item.icon;
+                                        width: 24px;
+                                        height: 24px;
+                                        image-fit: contain;
+                                    }
+                                }
+
+                                // Fallback icon when no image or icons disabled
+                                if (!root.cfg_show_icons || !item.has_icon) : Text {
+                                    text: (item.item_type == "dir") ? "" : (item.item_type == "calc" ? "󰃬" : "󰀻");
+                                    color: (item.item_type == "calc") ? #9ece6a : (item.item_type == "dir" ? #7aa2f7 : #7dcfff);
+                                    font-size: 18px;
+                                    vertical-alignment: center;
+                                }
+
+                                // Item Name
+                                Text {
+                                    text: item.name;
+                                    color: (index == root.selected_index) ? #ffffff : #c0caf5;
+                                    font-weight: (index == root.selected_index) ? 700 : 500;
+                                    font-size: 14px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+
+                            // Right Side: Category Badge / Path preview
+                            HorizontalLayout {
+                                alignment: end;
+                                Rectangle {
+                                    background: (index == root.selected_index) ? #1f2335 : #24283b;
+                                    border-radius: 4px;
+                                    height: 22px;
+                                    border-width: 1px;
+                                    border-color: (index == root.selected_index) ? #3b4261 : #292e42;
+
+                                    HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+                                        Text {
+                                            text: item.category;
+                                            color: (index == root.selected_index) ? #7dcfff : #7aa2f7;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Divider line above footer
+            Rectangle {
+                height: 1px;
+                background: #292e42;
+            }
+
+            // 4. Clean Footer Status Bar
+            if root.cfg_show_status_bar : footer := Rectangle {
+                height: 26px;
+
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 16px;
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Enter]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Open"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Tab]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Complete"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Alt+T]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Terminal"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Ctrl+,]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Settings"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+
+                    Text { text: "│"; color: #3b4261; font-size: 11px; vertical-alignment: center; }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text { text: "[Esc]"; color: #7aa2f7; font-weight: 700; font-size: 11px; vertical-alignment: center; }
+                        Text { text: "Quit"; color: #565f89; font-size: 11px; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // VIEW 2: IN-APP GUI SETTINGS & CONFIG VIEW
+        // ==========================================
+        settings_view := VerticalLayout {
+            visible: root.in_settings_mode;
+            padding-left: 20px;
+            padding-right: 20px;
+            padding-top: 14px;
+            padding-bottom: 14px;
+            spacing: 12px;
+
+            // 1. Settings Header Bar
+            HorizontalLayout {
+                height: 28px;
+                alignment: space-between;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: "⚙";
+                        color: #7aa2f7;
+                        font-size: 16px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "VIEW LAUNCHER CONFIGURATION";
+                        color: #ffffff;
+                        font-size: 13px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Back button
+                back_btn := Rectangle {
+                    height: 26px;
+                    background: back_touch.has-hover ? #3b4261 : #24283b;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: #414868;
+
+                    back_touch := TouchArea {
+                        clicked => {
+                            root.close_settings();
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 4px;
+                        Text {
+                            text: "← Back [Esc]";
+                            color: #c0caf5;
+                            font-size: 12px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: #292e42; }
+
+            // 2. Settings Content Area
+            VerticalLayout {
+                vertical-stretch: 1;
+                spacing: 10px;
+
+                // Group 1: Appearance
+                Text {
+                    text: "APPEARANCE & DISPLAY";
+                    color: #7aa2f7;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+
+                // Setting: Show App Icons
+                Rectangle {
+                    height: 38px;
+                    background: #24283b;
+                    border-radius: 6px;
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        alignment: space-between;
+                        Text {
+                            text: "Show Native Application Icons";
+                            color: #c0caf5;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                        }
+                        toggle_icon := Rectangle {
+                            width: 64px;
+                            height: 26px;
+                            border-radius: 13px;
+                            background: root.cfg_show_icons ? #7aa2f7 : #414868;
+                            TouchArea {
+                                clicked => {
+                                    root.cfg_show_icons = !root.cfg_show_icons;
+                                }
+                            }
+                            Text {
+                                text: root.cfg_show_icons ? "ON" : "OFF";
+                                color: root.cfg_show_icons ? #1a1b26 : #a9b1d6;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Setting: Show Status Bar
+                Rectangle {
+                    height: 38px;
+                    background: #24283b;
+                    border-radius: 6px;
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        alignment: space-between;
+                        Text {
+                            text: "Show Bottom Keyboard Hints Bar";
+                            color: #c0caf5;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                        }
+                        toggle_bar := Rectangle {
+                            width: 64px;
+                            height: 26px;
+                            border-radius: 13px;
+                            background: root.cfg_show_status_bar ? #7aa2f7 : #414868;
+                            TouchArea {
+                                clicked => {
+                                    root.cfg_show_status_bar = !root.cfg_show_status_bar;
+                                }
+                            }
+                            Text {
+                                text: root.cfg_show_status_bar ? "ON" : "OFF";
+                                color: root.cfg_show_status_bar ? #1a1b26 : #a9b1d6;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Group 2: Search Behavior
+                Text {
+                    text: "SEARCH & ENGINE";
+                    color: #7aa2f7;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+
+                // Setting: Match Full Path
+                Rectangle {
+                    height: 38px;
+                    background: #24283b;
+                    border-radius: 6px;
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        alignment: space-between;
+                        Text {
+                            text: "Match Full File & Directory Paths";
+                            color: #c0caf5;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                        }
+                        toggle_path := Rectangle {
+                            width: 64px;
+                            height: 26px;
+                            border-radius: 13px;
+                            background: root.cfg_enable_path_matching ? #2ac3de : #414868;
+                            TouchArea {
+                                clicked => {
+                                    root.cfg_enable_path_matching = !root.cfg_enable_path_matching;
+                                }
+                            }
+                            Text {
+                                text: root.cfg_enable_path_matching ? "ON" : "OFF";
+                                color: root.cfg_enable_path_matching ? #1a1b26 : #a9b1d6;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Setting: Max Results Selector
+                Rectangle {
+                    height: 38px;
+                    background: #24283b;
+                    border-radius: 6px;
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        alignment: space-between;
+                        Text {
+                            text: "Max Search Results Limit";
+                            color: #c0caf5;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                        }
+                        HorizontalLayout {
+                            spacing: 6px;
+                            alignment: end;
+
+                            for num in [10, 15, 20, 30] : Rectangle {
+                                width: 34px;
+                                height: 24px;
+                                border-radius: 4px;
+                                background: (root.cfg_max_results == num) ? #7aa2f7 : #1f2335;
+                                border-width: 1px;
+                                border-color: (root.cfg_max_results == num) ? #7aa2f7 : #3b4261;
+                                TouchArea {
+                                    clicked => {
+                                        root.cfg_max_results = num;
+                                    }
+                                }
+                                Text {
+                                    text: "\{num}";
+                                    color: (root.cfg_max_results == num) ? #1a1b26 : #c0caf5;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Status notification text
+            if root.settings_status != "" : Text {
+                text: root.settings_status;
+                color: #9ece6a;
+                font-size: 12px;
+                font-weight: 600;
+                horizontal-alignment: center;
+            }
+
+            Rectangle { height: 1px; background: #292e42; }
+
+            // 4. Bottom Action Buttons
+            HorizontalLayout {
+                height: 36px;
+                spacing: 12px;
+                alignment: end;
+
+                // Button: Open Raw config.toml
+                raw_btn := Rectangle {
+                    background: raw_touch.has-hover ? #3b4261 : #24283b;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: #414868;
+
+                    raw_touch := TouchArea {
+                        clicked => {
+                            root.open_raw_config();
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        Text {
+                            text: "📝 Edit config.toml";
+                            color: #c0caf5;
+                            font-size: 12px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // Button: Save & Apply
+                save_btn := Rectangle {
+                    background: save_touch.has-hover ? #89b4fa : #7aa2f7;
+                    border-radius: 6px;
+
+                    save_touch := TouchArea {
+                        clicked => {
+                            root.save_settings(
+                                root.cfg_show_icons,
+                                root.cfg_show_status_bar,
+                                root.cfg_enable_path_matching,
+                                root.cfg_max_results,
+                                root.cfg_max_depth
+                            );
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        Text {
+                            text: "💾 Save & Apply Changes";
+                            color: #1a1b26;
                             font-size: 13px;
                             font-weight: 700;
                             vertical-alignment: center;
-                        }
-                    }
-
-                    // Back button
-                    back_btn := Rectangle {
-                        height: 26px;
-                        background: back_touch.has-hover ? #3b4261 : #24283b;
-                        border-radius: 6px;
-                        border-width: 1px;
-                        border-color: #414868;
-
-                        back_touch := TouchArea {
-                            clicked => {
-                                root.close_settings();
-                            }
-                        }
-
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            padding-right: 10px;
-                            spacing: 4px;
-                            Text {
-                                text: "← Back [Esc]";
-                                color: #c0caf5;
-                                font-size: 12px;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
-
-                Rectangle { height: 1px; background: #292e42; }
-
-                // 2. Settings Content Area
-                VerticalLayout {
-                    vertical-stretch: 1;
-                    spacing: 10px;
-
-                    // Group 1: Appearance
-                    Text {
-                        text: "APPEARANCE & DISPLAY";
-                        color: #7aa2f7;
-                        font-size: 11px;
-                        font-weight: 700;
-                    }
-
-                    // Setting: Show App Icons
-                    Rectangle {
-                        height: 38px;
-                        background: #24283b;
-                        border-radius: 6px;
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
-                            alignment: space-between;
-                            Text {
-                                text: "Show Native Application Icons";
-                                color: #c0caf5;
-                                font-size: 13px;
-                                vertical-alignment: center;
-                            }
-                            toggle_icon := Rectangle {
-                                width: 64px;
-                                height: 26px;
-                                border-radius: 13px;
-                                background: root.cfg_show_icons ? #7aa2f7 : #414868;
-                                TouchArea {
-                                    clicked => {
-                                        root.cfg_show_icons = !root.cfg_show_icons;
-                                    }
-                                }
-                                Text {
-                                    text: root.cfg_show_icons ? "ON" : "OFF";
-                                    color: root.cfg_show_icons ? #1a1b26 : #a9b1d6;
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
-
-                    // Setting: Show Status Bar
-                    Rectangle {
-                        height: 38px;
-                        background: #24283b;
-                        border-radius: 6px;
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
-                            alignment: space-between;
-                            Text {
-                                text: "Show Bottom Keyboard Hints Bar";
-                                color: #c0caf5;
-                                font-size: 13px;
-                                vertical-alignment: center;
-                            }
-                            toggle_bar := Rectangle {
-                                width: 64px;
-                                height: 26px;
-                                border-radius: 13px;
-                                background: root.cfg_show_status_bar ? #7aa2f7 : #414868;
-                                TouchArea {
-                                    clicked => {
-                                        root.cfg_show_status_bar = !root.cfg_show_status_bar;
-                                    }
-                                }
-                                Text {
-                                    text: root.cfg_show_status_bar ? "ON" : "OFF";
-                                    color: root.cfg_show_status_bar ? #1a1b26 : #a9b1d6;
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
-
-                    // Group 2: Search Behavior
-                    Text {
-                        text: "SEARCH & ENGINE";
-                        color: #7aa2f7;
-                        font-size: 11px;
-                        font-weight: 700;
-                    }
-
-                    // Setting: Match Full Path
-                    Rectangle {
-                        height: 38px;
-                        background: #24283b;
-                        border-radius: 6px;
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
-                            alignment: space-between;
-                            Text {
-                                text: "Match Full File & Directory Paths";
-                                color: #c0caf5;
-                                font-size: 13px;
-                                vertical-alignment: center;
-                            }
-                            toggle_path := Rectangle {
-                                width: 64px;
-                                height: 26px;
-                                border-radius: 13px;
-                                background: root.cfg_enable_path_matching ? #2ac3de : #414868;
-                                TouchArea {
-                                    clicked => {
-                                        root.cfg_enable_path_matching = !root.cfg_enable_path_matching;
-                                    }
-                                }
-                                Text {
-                                    text: root.cfg_enable_path_matching ? "ON" : "OFF";
-                                    color: root.cfg_enable_path_matching ? #1a1b26 : #a9b1d6;
-                                    font-size: 11px;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                    }
-
-                    // Setting: Max Results Selector
-                    Rectangle {
-                        height: 38px;
-                        background: #24283b;
-                        border-radius: 6px;
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
-                            alignment: space-between;
-                            Text {
-                                text: "Max Search Results Limit";
-                                color: #c0caf5;
-                                font-size: 13px;
-                                vertical-alignment: center;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                alignment: end;
-
-                                for num in [10, 15, 20, 30] : Rectangle {
-                                    width: 34px;
-                                    height: 24px;
-                                    border-radius: 4px;
-                                    background: (root.cfg_max_results == num) ? #7aa2f7 : #1f2335;
-                                    border-width: 1px;
-                                    border-color: (root.cfg_max_results == num) ? #7aa2f7 : #3b4261;
-                                    TouchArea {
-                                        clicked => {
-                                            root.cfg_max_results = num;
-                                        }
-                                    }
-                                    Text {
-                                        text: "\{num}";
-                                        color: (root.cfg_max_results == num) ? #1a1b26 : #c0caf5;
-                                        font-size: 11px;
-                                        font-weight: 700;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3. Status notification text
-                if root.settings_status != "" : Text {
-                    text: root.settings_status;
-                    color: #9ece6a;
-                    font-size: 12px;
-                    font-weight: 600;
-                    horizontal-alignment: center;
-                }
-
-                Rectangle { height: 1px; background: #292e42; }
-
-                // 4. Bottom Action Buttons
-                HorizontalLayout {
-                    height: 36px;
-                    spacing: 12px;
-                    alignment: end;
-
-                    // Button: Open Raw config.toml
-                    raw_btn := Rectangle {
-                        background: raw_touch.has-hover ? #3b4261 : #24283b;
-                        border-radius: 6px;
-                        border-width: 1px;
-                        border-color: #414868;
-
-                        raw_touch := TouchArea {
-                            clicked => {
-                                root.open_raw_config();
-                            }
-                        }
-
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
-                            Text {
-                                text: "📝 Edit config.toml";
-                                color: #c0caf5;
-                                font-size: 12px;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-
-                    // Button: Save & Apply
-                    save_btn := Rectangle {
-                        background: save_touch.has-hover ? #89b4fa : #7aa2f7;
-                        border-radius: 6px;
-
-                        save_touch := TouchArea {
-                            clicked => {
-                                root.save_settings(
-                                    root.cfg_show_icons,
-                                    root.cfg_show_status_bar,
-                                    root.cfg_enable_path_matching,
-                                    root.cfg_max_results,
-                                    root.cfg_max_depth
-                                );
-                            }
-                        }
-
-                        HorizontalLayout {
-                            padding-left: 18px;
-                            padding-right: 18px;
-                            Text {
-                                text: "💾 Save & Apply Changes";
-                                color: #1a1b26;
-                                font-size: 13px;
-                                font-weight: 700;
-                                vertical-alignment: center;
-                            }
                         }
                     }
                 }
