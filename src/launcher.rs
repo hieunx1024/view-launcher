@@ -114,7 +114,7 @@ impl LauncherEngine {
                 exec_or_path: custom.exec.clone(),
                 item_type: ItemType::App,
                 description: custom.description.clone(),
-                terminal: custom.terminal.unwrap_or(false),
+                terminal: custom.terminal,
                 icon: custom.icon.clone(),
             });
         }
@@ -321,7 +321,9 @@ impl LauncherEngine {
         let search_paths = if config.search.paths.is_empty() {
             vec![crate::config::SearchPathConfig {
                 path: "~".to_string(),
+                depth: config.search.max_depth,
                 max_depth: Some(config.search.max_depth),
+                exclude: Vec::new(),
             }]
         } else {
             config.search.paths.clone()
@@ -686,7 +688,7 @@ impl LauncherEngine {
                                 .stderr(std::process::Stdio::null())
                                 .stdin(std::process::Stdio::null())
                                 .pre_exec(|| {
-                                    unsafe { setsid(); }
+                                    setsid();
                                     Ok(())
                                 })
                                 .spawn()
@@ -702,7 +704,7 @@ impl LauncherEngine {
                                 .stderr(std::process::Stdio::null())
                                 .stdin(std::process::Stdio::null())
                                 .pre_exec(|| {
-                                    unsafe { setsid(); }
+                                    setsid();
                                     Ok(())
                                 })
                                 .spawn()
@@ -718,7 +720,7 @@ impl LauncherEngine {
                             .stderr(std::process::Stdio::null())
                             .stdin(std::process::Stdio::null())
                             .pre_exec(|| {
-                                unsafe { setsid(); }
+                                setsid();
                                 Ok(())
                             })
                             .spawn()
@@ -758,7 +760,7 @@ impl LauncherEngine {
                     .stderr(std::process::Stdio::null())
                     .stdin(std::process::Stdio::null())
                     .pre_exec(|| {
-                        unsafe { setsid(); }
+                        setsid();
                         Ok(())
                     })
                     .spawn()

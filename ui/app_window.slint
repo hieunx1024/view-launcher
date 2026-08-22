@@ -132,11 +132,11 @@ export component AppWindow inherits Window {
                                 root.item_activated(root.selected_index);
                                 return accept;
                             }
-                            if (event.text == Key.Down) {
+                            if (event.text == Key.DownArrow) {
                                 root.move_down();
                                 return accept;
                             }
-                            if (event.text == Key.Up) {
+                            if (event.text == Key.UpArrow) {
                                 root.move_up();
                                 return accept;
                             }

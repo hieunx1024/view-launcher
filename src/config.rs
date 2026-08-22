@@ -46,6 +46,7 @@ pub struct SearchPathConfig {
     pub path: String,
     #[serde(default = "default_depth")]
     pub depth: usize,
+    pub max_depth: Option<usize>,
     #[serde(default)]
     pub exclude: Vec<String>,
 }
@@ -56,10 +57,16 @@ fn default_depth() -> usize { 2 }
 pub struct SearchConfig {
     #[serde(default = "default_max_results")]
     pub max_results: usize,
+    #[serde(default = "default_depth")]
+    pub max_depth: usize,
     #[serde(default)]
     pub paths: Vec<SearchPathConfig>,
     #[serde(default = "default_true")]
     pub enable_path_matching: Option<bool>,
+    #[serde(default)]
+    pub ignored_dirs: Vec<String>,
+    #[serde(default)]
+    pub ignored_extensions: Vec<String>,
 }
 
 fn default_max_results() -> usize { 50 }
@@ -68,8 +75,11 @@ impl Default for SearchConfig {
     fn default() -> Self {
         Self {
             max_results: default_max_results(),
+            max_depth: default_depth(),
             paths: Vec::new(),
             enable_path_matching: Some(true),
+            ignored_dirs: Vec::new(),
+            ignored_extensions: Vec::new(),
         }
     }
 }
@@ -78,6 +88,7 @@ impl Default for SearchConfig {
 pub struct CustomAppConfig {
     pub name: String,
     pub exec: String,
+    pub description: Option<String>,
     #[serde(default)]
     pub terminal: bool,
     pub icon: Option<String>,

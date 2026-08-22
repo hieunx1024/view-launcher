@@ -11,7 +11,7 @@ keywords = ["launcher", "slint", "gui", "wayland", "fuzzy-search"]
 categories = ["command-line-utilities", "gui"]
 
 [dependencies]
-slint = "1.9"
+slint = { version = "=1.9.2", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2"] }
 fuzzy-matcher = "0.3.7"
 walkdir = "2.5"
 serde = { version = "1.0", features = ["derive"] }
@@ -20,7 +20,7 @@ dirs = "5.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [build-dependencies]
-slint-build = "1.9"
+slint-build = "=1.9.2"
 
 [package.metadata.deb]
 name = "view-launcher"
