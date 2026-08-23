@@ -40,6 +40,26 @@ jobs:
           cp assets/view-launcher.png target/deb-pkg/usr/share/pixmaps/
           cp assets/view-launcher.svg target/deb-pkg/usr/share/pixmaps/
           cp assets/view-launcher.svg target/deb-pkg/usr/share/icons/hicolor/scalable/apps/
+          cat << 'EOF' > target/deb-pkg/DEBIAN/control
+          Package: view-launcher
+          Version: 0.2.0
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Hieu Nguyen <hieunx@outlook.com>
+          Description: High-performance minimalist GUI desktop app & file launcher in Rust (<5ms)
+          EOF
+          cat << 'EOF' > target/deb-pkg/DEBIAN/postinst
+          #!/bin/sh
+          set -e
+          if command -v update-desktop-database >/dev/null 2>&1; then
+              update-desktop-database -q /usr/share/applications || true
+          fi
+          if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+              gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+          fi
+          exit 0
+          EOF
           chmod 755 target/deb-pkg/DEBIAN/postinst
           dpkg-deb --build target/deb-pkg target/view-launcher_0.2.0_amd64.deb
 
