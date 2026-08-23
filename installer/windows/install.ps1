@@ -25,11 +25,11 @@ if ($UserPath -notlike "*$InstallDir*") {
 
 $WshShell = New-Object -ComObject WScript.Shell
 
-# 1. Create Startup Shortcut with Windows Terminal & Hotkey Ctrl+Alt+Space
+# 1. Create Startup Shortcut with Hotkey Ctrl+Alt+Space
 $StartupDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $Shortcut = $WshShell.CreateShortcut("$StartupDir\ViewLauncher.lnk")
-$Shortcut.TargetPath = "wt.exe"
-$Shortcut.Arguments = "-d . `"$InstallDir\view-launcher.exe`""
+$Shortcut.TargetPath = "$InstallDir\view-launcher.exe"
+$Shortcut.Arguments = ""
 $Shortcut.WorkingDirectory = "$InstallDir"
 if (Test-Path "$InstallDir\view-launcher.ico") {
     $Shortcut.IconLocation = "$InstallDir\view-launcher.ico, 0"
@@ -40,8 +40,8 @@ $Shortcut.Save()
 # 2. Create Desktop Shortcut
 $DesktopDir = [Environment]::GetFolderPath("Desktop")
 $DeskShortcut = $WshShell.CreateShortcut("$DesktopDir\View Launcher.lnk")
-$DeskShortcut.TargetPath = "wt.exe"
-$DeskShortcut.Arguments = "-d . `"$InstallDir\view-launcher.exe`""
+$DeskShortcut.TargetPath = "$InstallDir\view-launcher.exe"
+$DeskShortcut.Arguments = ""
 $DeskShortcut.WorkingDirectory = "$InstallDir"
 if (Test-Path "$InstallDir\view-launcher.ico") {
     $DeskShortcut.IconLocation = "$InstallDir\view-launcher.ico, 0"
@@ -51,8 +51,8 @@ $DeskShortcut.Save()
 # 3. Create Start Menu Shortcut
 $StartMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
 $StartShortcut = $WshShell.CreateShortcut("$StartMenuDir\View Launcher.lnk")
-$StartShortcut.TargetPath = "wt.exe"
-$StartShortcut.Arguments = "-d . `"$InstallDir\view-launcher.exe`""
+$StartShortcut.TargetPath = "$InstallDir\view-launcher.exe"
+$StartShortcut.Arguments = ""
 $StartShortcut.WorkingDirectory = "$InstallDir"
 if (Test-Path "$InstallDir\view-launcher.ico") {
     $StartShortcut.IconLocation = "$InstallDir\view-launcher.ico, 0"

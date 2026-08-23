@@ -91,9 +91,14 @@ pub fn open_config_file() {
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("cmd")
-            .args(&["/C", "start", "", &config_path.to_string_lossy()])
-            .spawn();
+        #[cfg(windows)]
+        use std::os::windows::process::CommandExt;
+        #[allow(unused_mut)]
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(&["/C", "start", "", &config_path.to_string_lossy()]);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        let _ = cmd.spawn();
     }
 }
 
@@ -761,12 +766,17 @@ impl LauncherEngine {
 
         #[cfg(target_os = "windows")]
         {
-            let _ = Command::new("cmd")
-                .args(&["/C", "start", "", &item.exec_or_path])
+            #[cfg(windows)]
+            use std::os::windows::process::CommandExt;
+            #[allow(unused_mut)]
+            let mut cmd = Command::new("cmd");
+            cmd.args(&["/C", "start", "", &item.exec_or_path])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
-                .stdin(std::process::Stdio::null())
-                .spawn();
+                .stdin(std::process::Stdio::null());
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            let _ = cmd.spawn();
         }
     }
 
@@ -798,9 +808,14 @@ impl LauncherEngine {
 
         #[cfg(target_os = "windows")]
         {
-            let _ = Command::new("cmd")
-                .args(&["/C", "start", "wt.exe", "-d", &dir.to_string_lossy()])
-                .spawn();
+            #[cfg(windows)]
+            use std::os::windows::process::CommandExt;
+            #[allow(unused_mut)]
+            let mut cmd = Command::new("cmd");
+            cmd.args(&["/C", "start", "wt.exe", "-d", &dir.to_string_lossy()]);
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            let _ = cmd.spawn();
         }
     }
 
@@ -838,8 +853,15 @@ impl LauncherEngine {
 
         #[cfg(target_os = "windows")]
         {
+            #[cfg(windows)]
+            use std::os::windows::process::CommandExt;
             use std::io::Write;
-            if let Ok(mut child) = Command::new("clip").stdin(std::process::Stdio::piped()).spawn() {
+            #[allow(unused_mut)]
+            let mut cmd = Command::new("clip");
+            cmd.stdin(std::process::Stdio::piped());
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            if let Ok(mut child) = cmd.spawn() {
                 if let Some(mut stdin) = child.stdin.take() {
                     let _ = stdin.write_all(text.as_bytes());
                 }

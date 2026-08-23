@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 #[allow(unused_imports)]
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -17,9 +19,11 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::io::Write;
 
 #[cfg(windows)]
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, SocketAddr};
 #[cfg(windows)]
-use std::io::Write;
+use std::time::Duration;
+#[cfg(windows)]
+use std::io::{Read, Write};
 
 #[cfg(unix)]
 fn get_socket_path() -> PathBuf {
@@ -75,16 +79,23 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<
 
 #[cfg(windows)]
 fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) -> bool {
-    // Port 42425 on localhost for Windows single instance
-    if let Ok(mut stream) = TcpStream::connect("127.0.0.1:42425") {
+    let addr: SocketAddr = "127.0.0.1:42425".parse().unwrap();
+    // 1. Try connecting with a fast timeout (50ms) to toggle existing instance
+    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(50)) {
+        let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
         let _ = stream.write_all(b"toggle");
         return false;
     }
 
-    if let Ok(listener) = TcpListener::bind("127.0.0.1:42425") {
+    // 2. Bind TCP listener on localhost
+    if let Ok(listener) = TcpListener::bind(addr) {
         thread::spawn(move || {
             for stream in listener.incoming() {
-                if stream.is_ok() {
+                if let Ok(mut stream) = stream {
+                    let mut buf = [0u8; 6];
+                    let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
+                    let _ = stream.read(&mut buf);
+
                     let _ = slint::invoke_from_event_loop({
                         let ui_weak = ui_handle.clone();
                         let exit_flag = exit_trigger.clone();
