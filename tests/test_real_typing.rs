@@ -20,7 +20,23 @@ fn test_real_typing_simulation() {
             return;
         }
     };
-    let config = Config::load();
+    let mut config = Config::default();
+    config.apps.custom.push(view_launcher::config::CustomAppConfig {
+        name: "IntelliJ IDEA".to_string(),
+        exec: "idea".to_string(),
+        description: Some("IDE".to_string()),
+        terminal: false,
+        icon: None,
+        category: Some("IDE".to_string()),
+    });
+    config.apps.custom.push(view_launcher::config::CustomAppConfig {
+        name: "Firefox Browser".to_string(),
+        exec: "firefox".to_string(),
+        description: Some("Web Browser".to_string()),
+        terminal: false,
+        icon: None,
+        category: Some("Browser".to_string()),
+    });
     let engine = Arc::new(LauncherEngine::new(config));
     let icon_resolver = Arc::new(IconResolver::new());
     let current_results = Arc::new(std::sync::RwLock::new(Vec::new()));
