@@ -22,8 +22,6 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::net::{TcpListener, TcpStream, SocketAddr};
 #[cfg(windows)]
 use std::time::Duration;
-#[cfg(windows)]
-use std::io::{Read, Write};
 
 #[cfg(unix)]
 fn get_socket_path() -> PathBuf {

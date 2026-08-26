@@ -29,10 +29,11 @@ pub struct IconResolver {
 impl IconResolver {
     pub fn new() -> Self {
         let path_index = Arc::new(RwLock::new(HashMap::new()));
-        let index_clone = path_index.clone();
 
         #[cfg(not(target_os = "windows"))]
-        std::thread::spawn(move || {
+        {
+            let index_clone = path_index.clone();
+            std::thread::spawn(move || {
             let mut map = HashMap::new();
             let search_roots = [
                 "/usr/share/icons/Yaru",
@@ -76,6 +77,7 @@ impl IconResolver {
                 *lock = map;
             }
         });
+        }
 
         Self {
             icon_path_index: path_index,
