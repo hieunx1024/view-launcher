@@ -24,6 +24,8 @@ pub struct ThemeConfig {
     pub show_icons: Option<bool>,
     #[serde(default = "default_true")]
     pub show_status_bar: Option<bool>,
+    #[serde(default = "default_true")]
+    pub compact_empty_view: Option<bool>,
 }
 
 fn default_query_color() -> String { "#7aa2f7".to_string() }
@@ -43,6 +45,7 @@ impl Default for ThemeConfig {
             highlight_color: default_highlight_color(),
             show_icons: Some(true),
             show_status_bar: Some(true),
+            compact_empty_view: Some(true),
         }
     }
 }
@@ -249,6 +252,11 @@ pub fn setup_global_shortcut() {
             .unwrap_or(false);
 
         if is_gnome {
+            // Ensure GNOME automatically centers new windows in the middle of the screen
+            let _ = std::process::Command::new("gsettings")
+                .args(&["set", "org.gnome.mutter", "center-new-windows", "true"])
+                .status();
+
             let output = std::process::Command::new("gsettings")
                 .args(&["get", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings"])
                 .output();

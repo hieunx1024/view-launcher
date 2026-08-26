@@ -4,6 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::process::Command;
 use std::sync::{Arc, RwLock};
 use walkdir::WalkDir;
+use rayon::prelude::*;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use crate::config::Config;
@@ -24,11 +25,16 @@ pub enum ItemType {
     File,
     Dir,
     Calc,
+    System,
+    Window,
+    Clipboard,
+    Dmenu,
 }
 
 #[derive(Debug, Clone)]
 pub struct LauncherItem {
     pub name: String,
+    pub normalized_name: String,
     pub exec_or_path: String,
     pub item_type: ItemType,
     pub description: Option<String>,
@@ -37,11 +43,34 @@ pub struct LauncherItem {
 }
 
 impl LauncherItem {
+    pub fn new(
+        name: String,
+        exec_or_path: String,
+        item_type: ItemType,
+        description: Option<String>,
+        terminal: bool,
+        icon: Option<String>,
+    ) -> Self {
+        let normalized_name = remove_vietnamese_accents(&name);
+        Self {
+            name,
+            normalized_name,
+            exec_or_path,
+            item_type,
+            description,
+            terminal,
+            icon,
+        }
+    }
     pub fn get_category_tag(&self) -> &'static str {
         match self.item_type {
             ItemType::Calc => "Calc",
             ItemType::Dir => "Folder",
             ItemType::File => "File",
+            ItemType::System => "System",
+            ItemType::Window => "Window",
+            ItemType::Clipboard => "Clipboard",
+            ItemType::Dmenu => "Item",
             ItemType::App => {
                 let lower = format!("{} {} {}", self.name.to_lowercase(), self.exec_or_path.to_lowercase(), self.icon.as_deref().unwrap_or(""));
                 if lower.contains("idea") || lower.contains("pycharm") || lower.contains("clion") || lower.contains("webstorm") || lower.contains("code") || lower.contains("studio") || lower.contains("nvim") || lower.contains("vim") {
@@ -109,6 +138,7 @@ pub struct LauncherEngine {
     pub hidden_apps: Vec<String>,
     pub shallow_files: Arc<RwLock<Vec<LauncherItem>>>,
     pub history: Arc<RwLock<HistoryManager>>,
+    pub clipboard: Arc<crate::clipboard::ClipboardManager>,
     matcher: SkimMatcherV2,
     config: Config,
 }
@@ -116,6 +146,7 @@ pub struct LauncherEngine {
 impl LauncherEngine {
     pub fn new(config: Config) -> Self {
         let history = Arc::new(RwLock::new(HistoryManager::load()));
+        let clipboard = Arc::new(crate::clipboard::ClipboardManager::new());
         let mut engine = Self {
             apps: Vec::new(),
             custom_apps: Vec::new(),
@@ -123,20 +154,21 @@ impl LauncherEngine {
             hidden_apps: config.apps.hidden.clone(),
             shallow_files: Arc::new(RwLock::new(Vec::new())),
             history,
+            clipboard,
             matcher: SkimMatcherV2::default(),
             config: config.clone(),
         };
 
         // Load custom apps from config
         for custom in &config.apps.custom {
-            engine.custom_apps.push(LauncherItem {
-                name: custom.name.clone(),
-                exec_or_path: custom.exec.clone(),
-                item_type: ItemType::App,
-                description: custom.description.clone(),
-                terminal: custom.terminal,
-                icon: custom.icon.clone(),
-            });
+            engine.custom_apps.push(LauncherItem::new(
+                custom.name.clone(),
+                custom.exec.clone(),
+                ItemType::App,
+                custom.description.clone(),
+                custom.terminal,
+                custom.icon.clone(),
+            ));
         }
 
         engine.index_apps();
@@ -160,11 +192,33 @@ impl LauncherEngine {
         let mut paths = vec![
             PathBuf::from("/usr/share/applications"),
             PathBuf::from("/usr/local/share/applications"),
+            PathBuf::from("/var/lib/snapd/desktop/applications"),
+            PathBuf::from("/var/lib/flatpak/exports/share/applications"),
             dirs::home_dir().map(|mut h| {
                 h.push(".local/share/applications");
                 h
             }).unwrap_or_default(),
+            dirs::home_dir().map(|mut h| {
+                h.push(".local/share/flatpak/exports/share/applications");
+                h
+            }).unwrap_or_default(),
         ];
+
+        // Parse standard $XDG_DATA_DIRS (e.g. Ubuntu snap / flatpak / desktop entries)
+        if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
+            for dir_str in xdg_data_dirs.split(':') {
+                let trimmed = dir_str.trim();
+                if !trimmed.is_empty() {
+                    let mut p = PathBuf::from(trimmed);
+                    if p.file_name().map_or(true, |f| f != "applications") {
+                        p.push("applications");
+                    }
+                    if !paths.contains(&p) {
+                        paths.push(p);
+                    }
+                }
+            }
+        }
 
         // Add extra desktop paths from config
         for extra in &self.config.apps.extra_desktop_paths {
@@ -224,14 +278,14 @@ impl LauncherEngine {
                     
                     let is_hidden = self.hidden_apps.iter().any(|h| name.eq_ignore_ascii_case(h));
                     if !is_hidden {
-                        self.apps.push(LauncherItem {
+                        self.apps.push(LauncherItem::new(
                             name,
-                            exec_or_path: exec,
-                            item_type: ItemType::App,
-                            description: Some("Windows Shortcut".to_string()),
-                            terminal: false,
-                            icon: None,
-                        });
+                            exec,
+                            ItemType::App,
+                            Some("Windows Shortcut".to_string()),
+                            false,
+                            None,
+                        ));
                     }
                 }
             }
@@ -324,14 +378,14 @@ impl LauncherEngine {
         }
 
         if is_app && !name.is_empty() && !exec.is_empty() && !no_display && !hidden {
-            Some(LauncherItem {
+            Some(LauncherItem::new(
                 name,
-                exec_or_path: exec,
-                item_type: ItemType::App,
-                description: comment,
+                exec,
+                ItemType::App,
+                comment,
                 terminal,
-                icon: icon_hint,
-            })
+                icon_hint,
+            ))
         } else {
             None
         }
@@ -410,21 +464,21 @@ impl LauncherEngine {
                     s
                 });
 
-                files.push(LauncherItem {
+                files.push(LauncherItem::new(
                     name,
-                    exec_or_path: path_str,
+                    path_str,
                     item_type,
-                    description: desc,
-                    terminal: false,
-                    icon: None,
-                });
+                    desc,
+                    false,
+                    None,
+                ));
             }
         }
     }
 
     /// Resolves dynamic path searching (e.g. typing `~/Downloads/` directly lists Downloads contents)
     pub fn resolve_path_search(&self, input: &str) -> Option<(PathBuf, String)> {
-        if !input.contains('/') {
+        if !input.contains('/') && input != "~" {
             return None;
         }
 
@@ -432,7 +486,7 @@ impl LauncherEngine {
         let expanded = if input.starts_with("~/") {
             input.replacen("~/", &format!("{}/", home.to_string_lossy()), 1)
         } else if input == "~" {
-            home.to_string_lossy().to_string()
+            format!("{}/", home.to_string_lossy())
         } else {
             input.to_string()
         };
@@ -457,6 +511,70 @@ impl LauncherEngine {
         }
     }
 
+    /// Scans a specific directory recursively up to `max_depth` for filtering sub-items.
+    pub fn scan_dir_recursive(&self, dir: &Path, max_depth: usize) -> Vec<LauncherItem> {
+        let mut items = Vec::new();
+        let ignored_dirs = &self.config.search.ignored_dirs;
+        let ignored_exts = &self.config.search.ignored_extensions;
+
+        for entry in WalkDir::new(dir)
+            .max_depth(max_depth)
+            .into_iter()
+            .filter_entry(|e| {
+                if let Some(name) = e.file_name().to_str() {
+                    !ignored_dirs.iter().any(|ignored| name == ignored) && !name.starts_with('.')
+                } else {
+                    false
+                }
+            })
+            .flatten()
+        {
+            if items.len() >= 1000 {
+                break;
+            }
+            let path = entry.path();
+            if path == dir {
+                continue;
+            }
+
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                let ext_dot = format!(".{}", ext.to_lowercase());
+                if ignored_exts.iter().any(|ig| ig.eq_ignore_ascii_case(&ext_dot) || ig.eq_ignore_ascii_case(ext)) {
+                    continue;
+                }
+            }
+
+            let path_str = path.to_string_lossy().to_string();
+            let name = entry.file_name().to_string_lossy().to_string();
+            let item_type = if entry.file_type().is_dir() {
+                ItemType::Dir
+            } else {
+                ItemType::File
+            };
+
+            let desc = path.parent().map(|p| {
+                let s = p.to_string_lossy().to_string();
+                if let Some(home) = dirs::home_dir() {
+                    let home_str = home.to_string_lossy().to_string();
+                    if s.starts_with(&home_str) {
+                        return s.replacen(&home_str, "~", 1);
+                    }
+                }
+                s
+            });
+
+            items.push(LauncherItem::new(
+                name,
+                path_str,
+                item_type,
+                desc,
+                false,
+                None,
+            ));
+        }
+        items
+    }
+
     /// Scans a specific directory on-the-fly for quick sub-folder traversal.
     pub fn scan_dir_on_the_fly(&self, dir: &Path) -> Vec<LauncherItem> {
         let mut dirs = Vec::new();
@@ -468,23 +586,23 @@ impl LauncherEngine {
                 let path_str = path.to_string_lossy().to_string();
                 
                 if path.is_dir() {
-                    dirs.push(LauncherItem {
+                    dirs.push(LauncherItem::new(
                         name,
-                        exec_or_path: path_str,
-                        item_type: ItemType::Dir,
-                        description: Some(dir.to_string_lossy().to_string()),
-                        terminal: false,
-                        icon: None,
-                    });
+                        path_str,
+                        ItemType::Dir,
+                        Some(dir.to_string_lossy().to_string()),
+                        false,
+                        None,
+                    ));
                 } else {
-                    files.push(LauncherItem {
+                    files.push(LauncherItem::new(
                         name,
-                        exec_or_path: path_str,
-                        item_type: ItemType::File,
-                        description: Some(dir.to_string_lossy().to_string()),
-                        terminal: false,
-                        icon: None,
-                    });
+                        path_str,
+                        ItemType::File,
+                        Some(dir.to_string_lossy().to_string()),
+                        false,
+                        None,
+                    ));
                 }
             }
         }
@@ -499,12 +617,182 @@ impl LauncherEngine {
     /// Khi bắt đầu bằng `@f ` hoặc `@file `: Chuyển sang chế độ tìm kiếm file & thư mục.
     pub fn search(&self, query: &str) -> Vec<(LauncherItem, Vec<usize>)> {
         let trimmed_query = query.trim();
+        let query_normalized = remove_vietnamese_accents(trimmed_query);
         let shallow_files_guard = self.shallow_files.read().unwrap_or_else(|e| e.into_inner());
         let history_guard = self.history.read().unwrap_or_else(|e| e.into_inner());
 
         let mut results = Vec::new();
 
-        // 1. Chế độ tìm kiếm File chuyên biệt khi gõ tiền tố @f hoặc @file
+        // 1. Window Switcher Mode (@w or @win)
+        let is_win_mode = trimmed_query.starts_with("@w ") || trimmed_query.starts_with("@win ")
+            || trimmed_query == "@w" || trimmed_query == "@win";
+        if is_win_mode {
+            let win_query = if trimmed_query.starts_with("@win ") {
+                trimmed_query[5..].trim()
+            } else if trimmed_query.starts_with("@w ") {
+                trimmed_query[3..].trim()
+            } else {
+                ""
+            };
+            let win_query_normalized = remove_vietnamese_accents(win_query);
+            let windows = crate::window_switcher::get_open_windows(&self.apps);
+            let items: Vec<LauncherItem> = windows.into_iter().map(|w| {
+                let icon = self.apps.iter().find(|a| a.name == w.title || a.exec_or_path == w.id.replace("app:", "")).and_then(|a| a.icon.clone());
+                LauncherItem::new(
+                    w.title,
+                    w.id,
+                    ItemType::Window,
+                    Some(w.class_name),
+                    false,
+                    icon,
+                )
+            }).collect();
+
+            if win_query.is_empty() {
+                for item in items {
+                    results.push((item, Vec::new()));
+                }
+                return results;
+            }
+
+            let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = items
+                .par_iter()
+                .filter_map(|item| {
+                    let match_res = self.match_precomputed(
+                        &item.name,
+                        &item.normalized_name,
+                        win_query,
+                        &win_query_normalized,
+                    );
+                    let final_res = if match_res.is_some() {
+                        match_res
+                    } else if let Some(ref desc) = item.description {
+                        self.match_item(desc, win_query)
+                    } else {
+                        None
+                    };
+
+                    final_res.map(|(score, indices)| ((item.clone(), indices), score))
+                })
+                .collect();
+            matches.sort_by(|a, b| b.1.cmp(&a.1));
+            for (item_with_indices, _) in matches {
+                results.push(item_with_indices);
+            }
+            return results;
+        }
+
+        // 2. Clipboard History Mode (@c or @clip)
+        let is_clip_mode = trimmed_query.starts_with("@c ") || trimmed_query.starts_with("@clip ")
+            || trimmed_query == "@c" || trimmed_query == "@clip";
+        if is_clip_mode {
+            let clip_query = if trimmed_query.starts_with("@clip ") {
+                trimmed_query[6..].trim()
+            } else if trimmed_query.starts_with("@c ") {
+                trimmed_query[3..].trim()
+            } else {
+                ""
+            };
+            let clip_query_normalized = remove_vietnamese_accents(clip_query);
+            let history = self.clipboard.get_history();
+            let items: Vec<LauncherItem> = history.into_iter().map(|text| {
+                let one_line = text.lines().next().unwrap_or("").trim().to_string();
+                let snippet = if one_line.len() > 70 {
+                    format!("{}...", &one_line[..70])
+                } else if one_line.is_empty() {
+                    "Clipboard text".to_string()
+                } else {
+                    one_line
+                };
+                LauncherItem::new(
+                    snippet,
+                    text.clone(),
+                    ItemType::Clipboard,
+                    Some(format!("{} chars", text.len())),
+                    false,
+                    None,
+                )
+            }).collect();
+
+            if clip_query.is_empty() {
+                for item in items {
+                    results.push((item, Vec::new()));
+                }
+                return results;
+            }
+
+            let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = items
+                .par_iter()
+                .filter_map(|item| {
+                    let match_res = self.match_precomputed(
+                        &item.name,
+                        &item.normalized_name,
+                        clip_query,
+                        &clip_query_normalized,
+                    );
+                    let final_res = if match_res.is_some() {
+                        match_res
+                    } else {
+                        self.match_item(&item.exec_or_path, clip_query)
+                    };
+                    final_res.map(|(score, indices)| ((item.clone(), indices), score))
+                })
+                .collect();
+            matches.sort_by(|a, b| b.1.cmp(&a.1));
+            for (item_with_indices, _) in matches {
+                results.push(item_with_indices);
+            }
+            return results;
+        }
+
+        // 3. System / Power Actions (@sys or @power or keywords)
+        let is_sys_mode = trimmed_query.starts_with("@sys ") || trimmed_query.starts_with("@power ")
+            || trimmed_query == "@sys" || trimmed_query == "@power";
+        let is_sys_keyword = ["lock", "shutdown", "power off", "restart", "reboot", "sleep", "suspend", "logout", "log out"]
+            .iter().any(|&k| trimmed_query.eq_ignore_ascii_case(k));
+
+        if is_sys_mode || (is_sys_keyword && !trimmed_query.is_empty()) {
+            let sys_query = if trimmed_query.starts_with("@power ") {
+                trimmed_query[7..].trim()
+            } else if trimmed_query.starts_with("@sys ") {
+                trimmed_query[5..].trim()
+            } else if is_sys_mode {
+                ""
+            } else {
+                trimmed_query
+            };
+            let sys_query_normalized = remove_vietnamese_accents(sys_query);
+            let actions = crate::system_actions::get_system_actions();
+
+            if sys_query.is_empty() {
+                for item in actions {
+                    results.push((item, Vec::new()));
+                }
+                return results;
+            }
+
+            let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = actions
+                .into_iter()
+                .filter_map(|item| {
+                    let (score, indices) = self.match_precomputed(
+                        &item.name,
+                        &item.normalized_name,
+                        sys_query,
+                        &sys_query_normalized,
+                    )?;
+                    Some(((item, indices), score + 300))
+                })
+                .collect();
+            matches.sort_by(|a, b| b.1.cmp(&a.1));
+            for (item_with_indices, _) in matches {
+                results.push(item_with_indices);
+            }
+            if is_sys_mode {
+                return results;
+            }
+        }
+
+        // 4. Chế độ tìm kiếm File chuyên biệt khi gõ tiền tố @f hoặc @file
         let is_file_mode = trimmed_query.starts_with("@f ") || trimmed_query.starts_with("@file ")
             || trimmed_query == "@f" || trimmed_query == "@file";
 
@@ -516,6 +804,7 @@ impl LauncherEngine {
             } else {
                 ""
             };
+            let file_query_normalized = remove_vietnamese_accents(file_query);
 
             // Nếu chỉ gõ "@f" hoặc "@f ", hiển thị danh sách các file/thư mục mới nhất
             if file_query.is_empty() {
@@ -527,20 +816,38 @@ impl LauncherEngine {
 
             // Duyệt theo đường dẫn trực tiếp trong file mode (nếu có)
             if let Some((dir, filter)) = self.resolve_path_search(file_query) {
-                let dir_items = self.scan_dir_on_the_fly(&dir);
                 if filter.is_empty() {
+                    let dir_items = self.scan_dir_on_the_fly(&dir);
                     for item in dir_items {
                         results.push((item, Vec::new()));
                     }
                     return results;
                 }
 
-                let mut matched = Vec::new();
-                for item in dir_items {
-                    if let Some((final_score, final_indices)) = self.match_item(&item.name, &filter) {
-                        matched.push(((item, final_indices), final_score));
-                    }
-                }
+                let dir_items = self.scan_dir_recursive(&dir, 3);
+                let filter_normalized = remove_vietnamese_accents(&filter);
+                let enable_path_matching = self.config.search.enable_path_matching.unwrap_or(true);
+                let mut matched: Vec<((LauncherItem, Vec<usize>), i64)> = dir_items
+                    .par_iter()
+                    .filter_map(|item| {
+                        let match_res = self.match_precomputed(
+                            &item.name,
+                            &item.normalized_name,
+                            &filter,
+                            &filter_normalized,
+                        );
+                        let final_res = if match_res.is_some() {
+                            match_res
+                        } else if enable_path_matching {
+                            self.match_item(&item.exec_or_path, &filter)
+                        } else {
+                            None
+                        };
+
+                        final_res.map(|(score, indices)| ((item.clone(), indices), score))
+                    })
+                    .collect();
+
                 matched.sort_by(|a, b| b.1.cmp(&a.1));
                 for ((item, indices), _) in matched {
                     results.push((item, indices));
@@ -548,25 +855,31 @@ impl LauncherEngine {
                 return results;
             }
 
-            // Tìm kiếm mờ trong toàn bộ Files & Directories
+            // Tìm kiếm mờ song song (Rayon) trong toàn bộ Files & Directories
             let enable_path_matching = self.config.search.enable_path_matching.unwrap_or(true);
-            let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = Vec::new();
+            let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = shallow_files_guard
+                .par_iter()
+                .filter_map(|file| {
+                    let match_res = self.match_precomputed(
+                        &file.name,
+                        &file.normalized_name,
+                        file_query,
+                        &file_query_normalized,
+                    );
+                    let final_res = if match_res.is_some() {
+                        match_res
+                    } else if enable_path_matching {
+                        self.match_item(&file.exec_or_path, file_query)
+                    } else {
+                        None
+                    };
 
-            for file in shallow_files_guard.iter() {
-                let match_res = self.match_item(&file.name, file_query);
-                let final_res = if match_res.is_some() {
-                    match_res
-                } else if enable_path_matching {
-                    self.match_item(&file.exec_or_path, file_query)
-                } else {
-                    None
-                };
-
-                if let Some((score, indices)) = final_res {
-                    let boost = history_guard.get_boost(&file.exec_or_path);
-                    matches.push(((file.clone(), indices), score + boost));
-                }
-            }
+                    final_res.map(|(score, indices)| {
+                        let boost = history_guard.get_boost(&file.exec_or_path);
+                        ((file.clone(), indices), score + boost)
+                    })
+                })
+                .collect();
 
             matches.sort_by(|a, b| b.1.cmp(&a.1));
             for (item_with_indices, _) in matches {
@@ -579,14 +892,14 @@ impl LauncherEngine {
         if let Some(calc_val) = calc::evaluate(trimmed_query) {
             let formatted = calc::format_result(calc_val);
             results.push((
-                LauncherItem {
-                    name: format!("= {}", formatted),
-                    exec_or_path: formatted.clone(),
-                    item_type: ItemType::Calc,
-                    description: Some("Press Enter to copy result to clipboard".to_string()),
-                    terminal: false,
-                    icon: None,
-                },
+                LauncherItem::new(
+                    formatted.clone(),
+                    formatted.clone(),
+                    ItemType::Calc,
+                    Some("Press Enter to copy result to clipboard".to_string()),
+                    false,
+                    None,
+                ),
                 Vec::new(),
             ));
         }
@@ -594,20 +907,38 @@ impl LauncherEngine {
         // 3. Duyệt đường dẫn trực tiếp nếu bắt đầu bằng '/' hoặc '~'
         if trimmed_query.starts_with('/') || trimmed_query.starts_with('~') {
             if let Some((dir, filter)) = self.resolve_path_search(trimmed_query) {
-                let dir_items = self.scan_dir_on_the_fly(&dir);
                 if filter.is_empty() {
+                    let dir_items = self.scan_dir_on_the_fly(&dir);
                     for item in dir_items {
                         results.push((item, Vec::new()));
                     }
                     return results;
                 }
 
-                let mut matched = Vec::new();
-                for item in dir_items {
-                    if let Some((final_score, final_indices)) = self.match_item(&item.name, &filter) {
-                        matched.push(((item, final_indices), final_score));
-                    }
-                }
+                let dir_items = self.scan_dir_recursive(&dir, 3);
+                let filter_normalized = remove_vietnamese_accents(&filter);
+                let enable_path_matching = self.config.search.enable_path_matching.unwrap_or(true);
+                let mut matched: Vec<((LauncherItem, Vec<usize>), i64)> = dir_items
+                    .par_iter()
+                    .filter_map(|item| {
+                        let match_res = self.match_precomputed(
+                            &item.name,
+                            &item.normalized_name,
+                            &filter,
+                            &filter_normalized,
+                        );
+                        let final_res = if match_res.is_some() {
+                            match_res
+                        } else if enable_path_matching {
+                            self.match_item(&item.exec_or_path, &filter)
+                        } else {
+                            None
+                        };
+
+                        final_res.map(|(score, indices)| ((item.clone(), indices), score))
+                    })
+                    .collect();
+
                 matched.sort_by(|a, b| b.1.cmp(&a.1));
                 for ((item, indices), _) in matched {
                     results.push((item, indices));
@@ -646,41 +977,60 @@ impl LauncherEngine {
             return default_apps;
         }
 
-        // 5. Tìm kiếm mờ trong Ứng dụng (Chỉ tìm App - Cực nhanh & Không rác file)
-        let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = Vec::new();
-
-        // 5.1 Custom Apps
-        for custom in &self.custom_apps {
-            if let Some((score, indices)) = self.match_item(&custom.name, trimmed_query) {
+        // 5. Tìm kiếm mờ đa luồng trong Ứng dụng (Rayon Parallel Matching)
+        let mut custom_matches: Vec<((LauncherItem, Vec<usize>), i64)> = self
+            .custom_apps
+            .par_iter()
+            .filter_map(|custom| {
+                let (score, indices) = self.match_precomputed(
+                    &custom.name,
+                    &custom.normalized_name,
+                    trimmed_query,
+                    &query_normalized,
+                )?;
                 let boost = history_guard.get_boost(&custom.name) + 150;
-                matches.push(((custom.clone(), indices), score + boost));
-            }
-        }
+                Some(((custom.clone(), indices), score + boost))
+            })
+            .collect();
 
-        // 5.2 Standard Apps
-        for app in &self.apps {
-            if let Some((score, indices)) = self.match_item(&app.name, trimmed_query) {
+        let mut app_matches: Vec<((LauncherItem, Vec<usize>), i64)> = self
+            .apps
+            .par_iter()
+            .filter_map(|app| {
+                let (score, indices) = self.match_precomputed(
+                    &app.name,
+                    &app.normalized_name,
+                    trimmed_query,
+                    &query_normalized,
+                )?;
                 let boost = history_guard.get_boost(&app.name) + 100;
-                matches.push(((app.clone(), indices), score + boost));
-            }
-        }
+                Some(((app.clone(), indices), score + boost))
+            })
+            .collect();
 
-        // Sắp xếp theo độ khớp và lịch sử sử dụng
-        matches.sort_by(|a, b| b.1.cmp(&a.1));
+        custom_matches.append(&mut app_matches);
+        custom_matches.sort_by(|a, b| b.1.cmp(&a.1));
 
-        for (item_with_indices, _) in matches {
+        for (item_with_indices, _) in custom_matches {
             results.push(item_with_indices);
         }
 
         results
     }
 
-    fn match_item(&self, text: &str, query: &str) -> Option<(i64, Vec<usize>)> {
-        let (score_orig, indices_orig) = self.matcher.fuzzy_indices(text, query).unwrap_or((0, Vec::new()));
-        let (score_accent, indices_accent) = {
-            let text_stripped = remove_vietnamese_accents(text);
-            let query_stripped = remove_vietnamese_accents(query);
-            self.matcher.fuzzy_indices(&text_stripped, &query_stripped).unwrap_or((0, Vec::new()))
+    #[inline]
+    fn match_precomputed(
+        &self,
+        name: &str,
+        name_normalized: &str,
+        query: &str,
+        query_normalized: &str,
+    ) -> Option<(i64, Vec<usize>)> {
+        let (score_orig, indices_orig) = self.matcher.fuzzy_indices(name, query).unwrap_or((0, Vec::new()));
+        let (score_accent, indices_accent) = if !query_normalized.is_empty() {
+            self.matcher.fuzzy_indices(name_normalized, query_normalized).unwrap_or((0, Vec::new()))
+        } else {
+            (0, Vec::new())
         };
 
         if score_orig >= score_accent && score_orig > 0 {
@@ -692,11 +1042,32 @@ impl LauncherEngine {
         }
     }
 
-    /// Spawns the application or opens file safely.
+    fn match_item(&self, text: &str, query: &str) -> Option<(i64, Vec<usize>)> {
+        let query_normalized = remove_vietnamese_accents(query);
+        let text_normalized = remove_vietnamese_accents(text);
+        self.match_precomputed(text, &text_normalized, query, &query_normalized)
+    }
+
+    /// Spawns the application or executes item action safely.
     pub fn launch(&self, item: &LauncherItem) {
-        if item.item_type == ItemType::Calc {
-            self.copy_to_clipboard(&item.exec_or_path);
+        if item.item_type == ItemType::Calc || item.item_type == ItemType::Clipboard {
+            self.clipboard.copy_to_clipboard(&item.exec_or_path);
             return;
+        }
+
+        if item.item_type == ItemType::Window {
+            crate::window_switcher::focus_window(&item.exec_or_path);
+            return;
+        }
+
+        if item.item_type == ItemType::System {
+            crate::system_actions::execute_system_action(&item.exec_or_path);
+            return;
+        }
+
+        if item.item_type == ItemType::Dmenu {
+            println!("{}", item.name);
+            std::process::exit(0);
         }
 
         // Record history
@@ -760,7 +1131,7 @@ impl LauncherEngine {
                             .ok();
                     }
                 }
-                ItemType::Calc => {}
+                ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu => {}
             }
         }
 
@@ -785,7 +1156,7 @@ impl LauncherEngine {
         let dir = match item.item_type {
             ItemType::Dir => PathBuf::from(&item.exec_or_path),
             ItemType::File => Path::new(&item.exec_or_path).parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from(".")),
-            ItemType::App | ItemType::Calc => return,
+            ItemType::App | ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu => return,
         };
 
         #[cfg(not(target_os = "windows"))]
@@ -971,6 +1342,8 @@ mod tests {
                 home_str.push('/');
             }
             assert!(engine.resolve_path_search(&home_str).is_some());
+            assert!(engine.resolve_path_search("~").is_some());
+            assert!(engine.resolve_path_search("~/").is_some());
         }
     }
 
@@ -1019,6 +1392,57 @@ mod tests {
         assert_eq!(format_file_size(2450), "2.4 KB");
         assert_eq!(format_file_size(1048576), "1.0 MB");
         assert_eq!(format_file_size(1073741824), "1.0 GB");
+    }
+
+    #[test]
+    fn test_directory_search_and_scan() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        let current_dir = std::env::current_dir().unwrap();
+        let current_dir_str = current_dir.to_string_lossy();
+        
+        let on_the_fly = engine.scan_dir_on_the_fly(&current_dir);
+        assert!(!on_the_fly.is_empty(), "Current dir should not be empty");
+        assert!(on_the_fly.iter().any(|item| item.name == "Cargo.toml" || item.name == "src"));
+
+        let recursive = engine.scan_dir_recursive(&current_dir, 3);
+        assert!(!recursive.is_empty(), "Recursive scan should find files");
+        assert!(recursive.iter().any(|item| item.name == "main.rs" || item.name == "launcher.rs"));
+
+        let results = engine.search(&format!("@f {}/", current_dir_str));
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_system_mode_and_keywords() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        
+        let sys_results = engine.search("@sys");
+        assert!(!sys_results.is_empty());
+        assert!(sys_results.iter().all(|(item, _)| item.item_type == ItemType::System));
+
+        let lock_results = engine.search("lock");
+        assert!(lock_results.iter().any(|(item, _)| item.item_type == ItemType::System && item.name.contains("Lock")));
+
+        let reboot_results = engine.search("restart");
+        assert!(reboot_results.iter().any(|(item, _)| item.item_type == ItemType::System && item.name.contains("Restart")));
+    }
+
+    #[test]
+    fn test_window_mode_search() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        let win_results = engine.search("@w");
+        assert!(win_results.iter().all(|(item, _)| item.item_type == ItemType::Window));
+    }
+
+    #[test]
+    fn test_clipboard_mode_search() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        let clip_results = engine.search("@c");
+        assert!(clip_results.iter().all(|(item, _)| item.item_type == ItemType::Clipboard));
     }
 }
 

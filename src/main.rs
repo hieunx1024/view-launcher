@@ -63,7 +63,10 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<
                                     exit_flag.store(true, Ordering::SeqCst);
                                     let _ = ui.hide();
                                 } else {
+                                    ui.set_search_text("".into());
+                                    ui.set_is_expanded(false);
                                     let _ = ui.show();
+                                    ui.invoke_focus_search();
                                 }
                             }
                         }
@@ -105,6 +108,8 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<
                                     exit_flag.store(true, Ordering::SeqCst);
                                     let _ = ui.hide();
                                 } else {
+                                    ui.set_search_text("".into());
+                                    ui.set_is_expanded(false);
                                     let _ = ui.show();
                                     ui.invoke_focus_search();
                                 }
@@ -127,21 +132,86 @@ fn populate_items(
 ) -> Vec<LauncherItem> {
     let trimmed = query.trim();
     let is_file_mode = trimmed.starts_with("@f") || trimmed.starts_with("@file");
+    let is_win_mode = trimmed.starts_with("@w") || trimmed.starts_with("@win");
+    let is_clip_mode = trimmed.starts_with("@c") || trimmed.starts_with("@clip");
+    let is_sys_mode = trimmed.starts_with("@sys") || trimmed.starts_with("@power");
+
+    let mode_badge = if is_file_mode {
+        "Files"
+    } else if is_win_mode {
+        "Windows"
+    } else if is_clip_mode {
+        "Clipboard"
+    } else if is_sys_mode {
+        "System"
+    } else {
+        ""
+    };
+    ui.set_mode_badge_text(mode_badge.into());
+    ui.set_is_file_mode(is_file_mode);
+
     let results = engine.search(query);
     let count = results.len();
-
-    ui.set_is_file_mode(is_file_mode);
     ui.set_has_results(count > 0);
-    if is_file_mode {
-        ui.set_mode_title("FILE SEARCH".into());
-        ui.set_status_item_count(format!("{} files", count).into());
+
+    let (mode_title, item_count_suffix) = if is_file_mode {
+        ("FILE SEARCH", "files")
+    } else if is_win_mode {
+        ("WINDOWS", "windows")
+    } else if is_clip_mode {
+        ("CLIPBOARD", "items")
+    } else if is_sys_mode {
+        ("SYSTEM", "actions")
     } else {
-        ui.set_mode_title("APPLICATIONS".into());
-        ui.set_status_item_count(format!("{} apps", count).into());
-    }
+        ("APPLICATIONS", "apps")
+    };
+    ui.set_mode_title(mode_title.into());
+    ui.set_status_item_count(format!("{} {}", count, item_count_suffix).into());
 
     let mut current_items = Vec::new();
     let mut slint_items = Vec::new();
+
+    let file_query = if trimmed.starts_with("@file ") {
+        trimmed[6..].trim()
+    } else if trimmed.starts_with("@f ") {
+        trimmed[3..].trim()
+    } else if is_file_mode {
+        ""
+    } else {
+        trimmed
+    };
+
+    let is_dir_view = if let Some((dir, filter)) = engine.resolve_path_search(file_query) {
+        filter.is_empty() && dir.is_dir()
+    } else {
+        false
+    };
+
+    if count == 0 {
+        if is_dir_view {
+            ui.set_empty_state_title("Folder is empty".into());
+            ui.set_empty_state_subtitle("Press Backspace to go back to parent folder".into());
+            ui.set_is_empty_folder(true);
+        } else if is_win_mode {
+            ui.set_empty_state_title("No matching windows found".into());
+            ui.set_empty_state_subtitle("Make sure target application window is running".into());
+            ui.set_is_empty_folder(false);
+        } else if is_clip_mode {
+            ui.set_empty_state_title("Clipboard is empty".into());
+            ui.set_empty_state_subtitle("Copy some text to see it appear in clipboard history".into());
+            ui.set_is_empty_folder(false);
+        } else if !trimmed.is_empty() {
+            ui.set_empty_state_title(format!("No results for '{}'", trimmed).into());
+            ui.set_empty_state_subtitle("Try searching for an app, file, or math command".into());
+            ui.set_is_empty_folder(false);
+        } else {
+            ui.set_empty_state_title("No applications found".into());
+            ui.set_empty_state_subtitle("Try searching for an app, file, or math command".into());
+            ui.set_is_empty_folder(false);
+        }
+    } else {
+        ui.set_is_empty_folder(false);
+    }
 
     const MAX_COMPUTE_RESULTS: usize = 50;
     for (item, _indices) in results.into_iter().take(MAX_COMPUTE_RESULTS) {
@@ -164,6 +234,19 @@ fn populate_items(
             launcher::ItemType::Calc => {
                 (None, "Calc".to_string())
             }
+            launcher::ItemType::Window => {
+                let icon = icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
+                (icon, item.description.clone().unwrap_or_else(|| "Window".to_string()))
+            }
+            launcher::ItemType::Clipboard => {
+                (None, item.description.clone().unwrap_or_else(|| "Clipboard".to_string()))
+            }
+            launcher::ItemType::System => {
+                (None, "System".to_string())
+            }
+            launcher::ItemType::Dmenu => {
+                (None, "".to_string())
+            }
         };
 
         let has_icon = slint_icon.is_some();
@@ -174,6 +257,10 @@ fn populate_items(
             launcher::ItemType::File => "file",
             launcher::ItemType::Dir => "dir",
             launcher::ItemType::Calc => "calc",
+            launcher::ItemType::Window => "win",
+            launcher::ItemType::Clipboard => "clip",
+            launcher::ItemType::System => "sys",
+            launcher::ItemType::Dmenu => "dmenu",
         };
 
         slint_items.push(LauncherItemData {
@@ -207,7 +294,165 @@ fn ensure_selection_visible(ui: &AppWindow, selected_index: i32) {
     }
 }
 
+fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::BufRead;
+    let stdin = std::io::stdin();
+    let raw_lines: Vec<String> = stdin.lock().lines().filter_map(|l| l.ok()).collect();
+    if raw_lines.is_empty() {
+        return Ok(());
+    }
+
+    let ui = AppWindow::new()?;
+    ui.set_mode_title(prompt.to_string().into());
+    ui.set_mode_badge_text("dmenu".into());
+    ui.set_is_file_mode(false);
+    ui.set_cfg_show_icons(false);
+    ui.set_cfg_show_status_bar(true);
+    ui.set_cfg_max_results(8);
+
+    let icon_resolver = IconResolver::new();
+    ui.set_settings_icon(icon_resolver.get_gear_icon());
+    ui.set_nav_icon(icon_resolver.get_nav_icon());
+    ui.set_enter_icon(icon_resolver.get_enter_icon());
+    ui.set_search_icon(icon_resolver.get_search_icon());
+    ui.set_folder_icon(icon_resolver.get_folder_icon());
+
+    ui.window().with_winit_window(|winit_window| {
+        winit_window.set_transparent(true);
+        winit_window.set_decorations(false);
+        if let Some(monitor) = winit_window.current_monitor().or_else(|| winit_window.primary_monitor()) {
+            let screen_size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            let window_width = (680.0 * scale_factor) as u32;
+            let window_height = (600.0 * scale_factor) as u32;
+            let pos_x = screen_size.width.saturating_sub(window_width) / 2;
+            let pos_y = screen_size.height.saturating_sub(window_height) / 2;
+            winit_window.set_outer_position(i_slint_backend_winit::winit::dpi::PhysicalPosition::new(pos_x as i32, pos_y as i32));
+        }
+    });
+
+    let current_filtered = std::rc::Rc::new(std::cell::RefCell::new(raw_lines.clone()));
+
+    let update_dmenu_view = {
+        let ui_weak = ui.as_weak();
+        let raw_lines = raw_lines.clone();
+        let current_filtered = current_filtered.clone();
+        move |query: &str| {
+            let Some(ui) = ui_weak.upgrade() else { return; };
+            let trimmed = query.trim();
+            let filtered: Vec<String> = if trimmed.is_empty() {
+                raw_lines.clone()
+            } else {
+                let norm_query = launcher::remove_vietnamese_accents(trimmed);
+                let matcher = fuzzy_matcher::skim::SkimMatcherV2::default();
+                use fuzzy_matcher::FuzzyMatcher;
+                let mut matches: Vec<(String, i64)> = raw_lines
+                    .iter()
+                    .filter_map(|line| {
+                        let norm_line = launcher::remove_vietnamese_accents(line);
+                        let s1 = matcher.fuzzy_match(line, trimmed).unwrap_or(0);
+                        let s2 = matcher.fuzzy_match(&norm_line, &norm_query).unwrap_or(0);
+                        let max_s = s1.max(s2);
+                        if max_s > 0 { Some((line.clone(), max_s)) } else { None }
+                    })
+                    .collect();
+                matches.sort_by(|a, b| b.1.cmp(&a.1));
+                matches.into_iter().map(|(l, _)| l).collect()
+            };
+
+            *current_filtered.borrow_mut() = filtered.clone();
+            ui.set_has_results(!filtered.is_empty());
+            ui.set_status_item_count(format!("{} items", filtered.len()).into());
+            ui.set_selected_index(0);
+            ui.set_scroll_viewport_y(0.0);
+
+            let slint_items: Vec<LauncherItemData> = filtered
+                .iter()
+                .take(50)
+                .map(|l| LauncherItemData {
+                    name: l.clone().into(),
+                    category: "".into(),
+                    item_type: "dmenu".into(),
+                    has_icon: false,
+                    icon: slint::Image::default(),
+                    exec_or_path: l.clone().into(),
+                })
+                .collect();
+            ui.set_items(std::rc::Rc::new(slint::VecModel::from(slint_items)).into());
+        }
+    };
+
+    update_dmenu_view("");
+
+    {
+        let update_view = update_dmenu_view.clone();
+        ui.on_search_text_changed(move |text| {
+            update_view(text.as_str());
+        });
+    }
+
+    {
+        let current_filtered = current_filtered.clone();
+        ui.on_item_activated(move |idx| {
+            let list = current_filtered.borrow();
+            if let Some(item) = list.get(idx as usize) {
+                println!("{}", item);
+                std::process::exit(0);
+            }
+        });
+    }
+
+    {
+        let ui_weak = ui.as_weak();
+        let current_filtered = current_filtered.clone();
+        ui.on_move_up(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let cur = ui.get_selected_index();
+                if cur > 0 {
+                    let next = cur - 1;
+                    ui.set_selected_index(next);
+                    ensure_selection_visible(&ui, next);
+                }
+            }
+        });
+        let ui_weak = ui.as_weak();
+        ui.on_move_down(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let total = current_filtered.borrow().len() as i32;
+                let cur = ui.get_selected_index();
+                if cur + 1 < total {
+                    let next = cur + 1;
+                    ui.set_selected_index(next);
+                    ensure_selection_visible(&ui, next);
+                }
+            }
+        });
+    }
+
+    ui.on_close_window(|| {
+        std::process::exit(1);
+    });
+
+    ui.run()?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = std::env::args().collect();
+    let is_dmenu = args.iter().any(|a| a == "--dmenu" || a == "-d");
+    if is_dmenu {
+        let mut prompt = "Select:".to_string();
+        let mut i = 1;
+        while i < args.len() {
+            if (args[i] == "-p" || args[i] == "--prompt") && i + 1 < args.len() {
+                prompt = args[i + 1].clone();
+                i += 1;
+            }
+            i += 1;
+        }
+        return run_dmenu_mode(&prompt);
+    }
+
     let exit_trigger = Arc::new(AtomicBool::new(false));
 
     // 1. Create main Slint Window
@@ -226,6 +471,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_cfg_autostart(view_launcher::config::is_autostart_enabled());
     ui.set_cfg_show_icons(config.theme.show_icons.unwrap_or(true));
     ui.set_cfg_show_status_bar(config.theme.show_status_bar.unwrap_or(true));
+    ui.set_cfg_compact_empty(config.theme.compact_empty_view.unwrap_or(true));
     ui.set_cfg_enable_path_matching(config.search.enable_path_matching.unwrap_or(true));
     ui.set_cfg_max_results(config.search.max_results as i32);
     ui.set_cfg_max_depth(config.search.max_depth as i32);
@@ -238,6 +484,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_nav_icon(icon_resolver.get_nav_icon());
     ui.set_enter_icon(icon_resolver.get_enter_icon());
     ui.set_search_icon(icon_resolver.get_search_icon());
+    ui.set_folder_icon(icon_resolver.get_folder_icon());
 
     // Window properties & Icon
     let app_icon_opt = image::load_from_memory(include_bytes!("../assets/view-launcher.png"))
@@ -249,6 +496,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
     ui.window().with_winit_window(move |winit_window| {
+        winit_window.set_title("View Launcher");
         winit_window.set_transparent(true);
         winit_window.set_decorations(false);
         if let Some(icon) = app_icon_opt {
@@ -267,7 +515,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let screen_size = monitor.size();
                 let scale_factor = monitor.scale_factor();
                 let window_width = (680.0 * scale_factor) as u32;
-                let window_height = (520.0 * scale_factor) as u32;
+                let window_height = (600.0 * scale_factor) as u32;
                 let pos_x = screen_size.width.saturating_sub(window_width) / 2;
                 let pos_y = screen_size.height.saturating_sub(window_height) / 2;
                 winit_window.set_outer_position(i_slint_backend_winit::winit::dpi::PhysicalPosition::new(pos_x as i32, pos_y as i32));
@@ -373,7 +621,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(ui) = ui_weak.upgrade() {
                 let search_text = ui.get_search_text().to_string();
                 let is_file_mode = search_text.starts_with("@f") || search_text.starts_with("@file");
-                if is_file_mode {
+                let is_path_mode = search_text.starts_with('/') || search_text.starts_with('~');
+                if is_file_mode || is_path_mode {
                     let sel_idx = ui.get_selected_index() as usize;
                     let item_opt = {
                         if let Ok(lock) = current_results.read() {
@@ -386,11 +635,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(item) = item_opt {
                         if item.item_type == launcher::ItemType::Dir {
                             let mut path = item.exec_or_path;
+                            if let Some(home) = dirs::home_dir() {
+                                let home_str = home.to_string_lossy().to_string();
+                                if path.starts_with(&home_str) {
+                                    path = format!("~{}", &path[home_str.len()..]);
+                                }
+                            }
                             if !path.ends_with('/') {
                                 path.push('/');
                             }
-                            let new_search_text = format!("@f {}", path);
+                            let prefix = if search_text.starts_with("@file ") || search_text == "@file" {
+                                "@file "
+                            } else if search_text.starts_with("@f ") || search_text == "@f" {
+                                "@f "
+                            } else {
+                                ""
+                            };
+                            let new_search_text = format!("{}{}", prefix, path);
                             ui.set_search_text(new_search_text.clone().into());
+                            ui.invoke_move_cursor_to_end();
                             let items = populate_items(&ui, &engine, &icon_resolver, &new_search_text);
                             if let Ok(mut lock) = current_results.write() {
                                 *lock = items;
@@ -414,14 +677,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui.on_handle_backspace(move || -> bool {
             if let Some(ui) = ui_weak.upgrade() {
                 let search_text = ui.get_search_text().to_string();
-                if (search_text.starts_with("@f ") || search_text.starts_with("@file ")) && search_text.ends_with('/') {
-                    let prefix_len = if search_text.starts_with("@file ") { 6 } else { 3 };
+                let is_file_mode = search_text.starts_with("@f ") || search_text.starts_with("@file ");
+                let is_path_mode = search_text.starts_with('/') || search_text.starts_with('~');
+                if (is_file_mode || is_path_mode) && search_text.ends_with('/') {
+                    let prefix_len = if search_text.starts_with("@file ") {
+                        6
+                    } else if search_text.starts_with("@f ") {
+                        3
+                    } else {
+                        0
+                    };
                     let path_part = &search_text[prefix_len..];
                     let trimmed_path = path_part.trim_end_matches('/');
                     if let Some(pos) = trimmed_path.rfind('/') {
                         let parent_path = &trimmed_path[..=pos];
                         let new_search_text = format!("{}{}", &search_text[..prefix_len], parent_path);
                         ui.set_search_text(new_search_text.clone().into());
+                        ui.invoke_move_cursor_to_end();
                         let items = populate_items(&ui, &engine, &icon_resolver, &new_search_text);
                         if let Ok(mut lock) = current_results.write() {
                             *lock = items;
@@ -432,6 +704,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         let new_search_text = format!("{}", &search_text[..prefix_len]);
                         ui.set_search_text(new_search_text.clone().into());
+                        ui.invoke_move_cursor_to_end();
                         let items = populate_items(&ui, &engine, &icon_resolver, &new_search_text);
                         if let Ok(mut lock) = current_results.write() {
                             *lock = items;
@@ -563,11 +836,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let engine = engine.clone();
         let icon_resolver = icon_resolver.clone();
         let current_results = current_results.clone();
-        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth, autostart| {
+        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth, autostart, compact_empty| {
             let mut cfg = Config::load();
             cfg.general.autostart = autostart;
             cfg.theme.show_icons = Some(show_icons);
             cfg.theme.show_status_bar = Some(show_status_bar);
+            cfg.theme.compact_empty_view = Some(compact_empty);
             cfg.search.enable_path_matching = Some(enable_path);
             cfg.search.max_results = max_results as usize;
             cfg.search.max_depth = max_depth as usize;

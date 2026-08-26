@@ -42,7 +42,7 @@ jobs:
           cp assets/view-launcher.svg target/deb-pkg/usr/share/icons/hicolor/scalable/apps/
           cat << 'EOF' > target/deb-pkg/DEBIAN/control
           Package: view-launcher
-          Version: 0.2.0
+          Version: 0.3.0
           Section: utils
           Priority: optional
           Architecture: amd64
@@ -61,7 +61,7 @@ jobs:
           exit 0
           EOF
           chmod 755 target/deb-pkg/DEBIAN/postinst
-          dpkg-deb --build target/deb-pkg target/view-launcher_0.2.0_amd64.deb
+          dpkg-deb --build target/deb-pkg target/view-launcher_0.3.0_amd64.deb
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -69,7 +69,7 @@ jobs:
           name: linux-package
           path: |
             target/release/view-launcher
-            target/view-launcher_0.2.0_amd64.deb
+            target/view-launcher_0.3.0_amd64.deb
 
   test-windows:
     name: Test & Build (Windows)
