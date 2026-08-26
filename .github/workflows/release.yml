@@ -80,13 +80,17 @@ jobs:
           chmod 755 target/deb-pkg/DEBIAN/postinst
           dpkg-deb --build target/deb-pkg "target/view-launcher_${VERSION}_amd64.deb"
 
+      - name: Stage Linux release assets
+        run: |
+          mkdir -p target/dist-linux
+          cp target/view-launcher-linux-x86_64.tar.gz target/dist-linux/
+          cp target/view-launcher_*_amd64.deb target/dist-linux/
+
       - name: Upload Linux Assets
         uses: actions/upload-artifact@v4
         with:
           name: linux-assets
-          path: |
-            target/view-launcher-linux-x86_64.tar.gz
-            target/view-launcher_*_amd64.deb
+          path: target/dist-linux/*
 
   build-windows:
     name: Build Windows Packages
@@ -113,42 +117,46 @@ jobs:
         run: |
           iscc installer\windows\setup.iss
 
+      - name: Stage Windows release assets
+        shell: pwsh
+        run: |
+          mkdir -p target/dist-windows
+          cp target/view-launcher-windows-x86_64.zip target/dist-windows/
+          cp installer/windows/Output/view-launcher-setup.exe target/dist-windows/
+
       - name: Upload Windows Assets
         uses: actions/upload-artifact@v4
         with:
           name: windows-assets
-          path: |
-            target/view-launcher-windows-x86_64.zip
-            installer/windows/Output/view-launcher-setup.exe
+          path: target/dist-windows/*
 
   publish-release:
     name: Create GitHub Release
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     steps:
-      - name: Download Linux artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux-assets
           path: release-assets
+          merge-multiple: true
 
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-assets
-          path: release-assets
-
-      - name: Generate Checksums
+      - name: Flatten and Generate Checksums
         run: |
-          cd release-assets
+          mkdir -p release-files
+          find release-assets -type f -exec cp {} release-files/ \;
+          cd release-files
+          rm -f SHA256SUMS.txt
           sha256sum * > SHA256SUMS.txt
+          echo "=== RELEASE FILES TO PUBLISH ==="
+          ls -la
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/*
+            release-files/*
           draft: false
           prerelease: false
           generate_release_notes: true
