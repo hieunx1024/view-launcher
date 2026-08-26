@@ -518,10 +518,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. Start background socket listener for instant wakeup
     start_daemon_listener(exit_trigger.clone(), ui.as_weak());
 
-    // Setup global shortcut on desktop environments in background (non-blocking)
+    // Setup global shortcut and currency rate cache in background (non-blocking)
     std::thread::spawn(|| {
         view_launcher::config::setup_global_shortcut();
     });
+    view_launcher::calc::init_currency_rates();
 
     // 3. Load Config & Initialize Engine
     let config = Config::load();

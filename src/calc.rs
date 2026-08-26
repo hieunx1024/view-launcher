@@ -1,3 +1,9 @@
+use std::sync::RwLock;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 /// Ultra-fast, zero-dependency inline arithmetic expression evaluator for view-launcher.
 /// Supports +, -, *, /, %, ^, parentheses, floats, integers, hex (0x...), and bin (0b...).
 
@@ -464,8 +470,8 @@ pub fn evaluate_conversion(query: &str) -> Option<ConversionResult> {
         });
     }
 
-    // 7. Try Currency Conversion (Offline reference exchange rates)
-    if let Some((res_val, res_label, from_label)) = convert_units_by_table(val, &from_unit, &to_unit, &CURRENCY_TABLE) {
+    // 7. Try Currency Conversion (Dynamic live rates or offline fallback)
+    if let Some((res_val, res_label, from_label)) = convert_currency_dynamic(val, &from_unit, &to_unit) {
         let formatted = format_result(res_val);
         let title = format!("{} {}", formatted, res_label.to_uppercase());
         let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label.to_uppercase(), title);
@@ -474,6 +480,169 @@ pub fn evaluate_conversion(query: &str) -> Option<ConversionResult> {
             subtitle,
             value_to_copy: formatted,
         });
+    }
+
+    None
+}
+
+static DYNAMIC_RATES: RwLock<Option<HashMap<String, f64>>> = RwLock::new(None);
+
+fn get_rates_cache_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|mut p| {
+        p.push("view-launcher");
+        p.push("rates.json");
+        p
+    })
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct RatesCache {
+    timestamp: u64,
+    rates: HashMap<String, f64>,
+}
+
+/// Initializes local currency rates from disk cache and triggers a background 24h refresh.
+pub fn init_currency_rates() {
+    // 1. Load local cache immediately (< 0.1ms)
+    if let Some(path) = get_rates_cache_path() {
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(cache) = serde_json::from_str::<RatesCache>(&content) {
+                if let Ok(mut lock) = DYNAMIC_RATES.write() {
+                    *lock = Some(cache.rates);
+                }
+            }
+        }
+    }
+
+    // 2. Check if cache is older than 24h (86400s) or missing, and refresh in background
+    std::thread::spawn(move || {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let need_refresh = if let Some(path) = get_rates_cache_path() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(cache) = serde_json::from_str::<RatesCache>(&content) {
+                    now.saturating_sub(cache.timestamp) > 86400
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
+        } else {
+            true
+        };
+
+        if need_refresh {
+            fetch_and_save_rates(now);
+        }
+    });
+}
+
+fn fetch_and_save_rates(now: u64) {
+    let mut cmd = std::process::Command::new("curl");
+    cmd.args(&["-s", "--max-time", "3", "https://open.er-api.com/v6/latest/USD"]);
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    if let Ok(output) = cmd.output() {
+        if output.status.success() {
+            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                if let Some(rates_obj) = json.get("rates").and_then(|r| r.as_object()) {
+                    let mut rates_map = HashMap::new();
+                    for (k, v) in rates_obj {
+                        if let Some(num) = v.as_f64() {
+                            rates_map.insert(k.to_uppercase(), num);
+                        }
+                    }
+
+                    if !rates_map.is_empty() {
+                        let cache = RatesCache {
+                            timestamp: now,
+                            rates: rates_map.clone(),
+                        };
+
+                        if let Some(path) = get_rates_cache_path() {
+                            if let Some(parent) = path.parent() {
+                                let _ = fs::create_dir_all(parent);
+                            }
+                            if let Ok(serialized) = serde_json::to_string(&cache) {
+                                let _ = fs::write(path, serialized);
+                            }
+                        }
+
+                        if let Ok(mut lock) = DYNAMIC_RATES.write() {
+                            *lock = Some(rates_map);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn normalize_currency_code(alias: &str) -> Option<&'static str> {
+    match alias {
+        "usd" | "$" | "dollar" | "dollars" | "bucks" => Some("USD"),
+        "vnd" | "đ" | "dong" | "đồng" | "vnđ" => Some("VND"),
+        "eur" | "€" | "euro" | "euros" => Some("EUR"),
+        "jpy" | "¥" | "yen" => Some("JPY"),
+        "gbp" | "£" | "pound" | "pounds" | "quid" => Some("GBP"),
+        "cny" | "rmb" | "yuan" => Some("CNY"),
+        "sgd" => Some("SGD"),
+        "krw" | "won" => Some("KRW"),
+        "thb" | "baht" => Some("THB"),
+        "aud" => Some("AUD"),
+        "cad" => Some("CAD"),
+        "chf" | "franc" => Some("CHF"),
+        "inr" | "rupee" => Some("INR"),
+        "brl" => Some("BRL"),
+        "idr" | "rupiah" => Some("IDR"),
+        "myr" | "ringgit" => Some("MYR"),
+        "php" | "peso" => Some("PHP"),
+        "twd" => Some("TWD"),
+        "hkd" => Some("HKD"),
+        "nzd" => Some("NZD"),
+        "rub" | "ruble" => Some("RUB"),
+        other => {
+            if other.len() == 3 && other.chars().all(|c| c.is_ascii_alphabetic()) {
+                let upper = other.to_uppercase();
+                let leaked: &'static str = Box::leak(upper.into_boxed_str());
+                Some(leaked)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn convert_currency_dynamic(val: f64, from_u: &str, to_u: &str) -> Option<(f64, String, String)> {
+    let from_code = normalize_currency_code(from_u)?;
+    let to_code = normalize_currency_code(to_u)?;
+
+    // 1. Try dynamic cached rates
+    if let Ok(lock) = DYNAMIC_RATES.read() {
+        if let Some(ref rates) = *lock {
+            let from_rate = if from_code == "USD" { Some(1.0) } else { rates.get(from_code).copied() };
+            let to_rate = if to_code == "USD" { Some(1.0) } else { rates.get(to_code).copied() };
+
+            if let (Some(f_rate), Some(t_rate)) = (from_rate, to_rate) {
+                let val_in_usd = val / f_rate;
+                let res = val_in_usd * t_rate;
+                return Some((res, to_code.to_string(), from_code.to_string()));
+            }
+        }
+    }
+
+    // 2. Fallback to offline reference rates
+    if let Some((res, to_canon, from_canon)) = convert_units_by_table(val, from_u, to_u, &CURRENCY_TABLE) {
+        return Some((res, to_canon.to_string(), from_canon.to_string()));
     }
 
     None
