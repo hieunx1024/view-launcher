@@ -13,10 +13,10 @@ use view_launcher::launcher::{self, LauncherEngine, LauncherItem, open_config_fi
 use view_launcher::{AppWindow, LauncherItemData};
 use i_slint_backend_winit::WinitWindowAccessor;
 
+use std::io::{Read, Write};
+
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
-#[cfg(unix)]
-use std::io::Write;
 
 #[cfg(windows)]
 use std::net::{TcpListener, TcpStream, SocketAddr};
@@ -36,24 +36,48 @@ fn get_socket_path() -> PathBuf {
 }
 
 #[cfg(unix)]
-fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) -> bool {
+fn try_send_to_existing_instance(msg: &[u8]) -> bool {
     let socket_path = get_socket_path();
-
-    // 1. Try connecting to existing socket to toggle window
     if let Ok(mut stream) = UnixStream::connect(&socket_path) {
-        let _ = stream.write_all(b"toggle");
-        return false;
+        let _ = stream.write_all(msg);
+        return true;
     }
+    false
+}
 
-    // 2. Remove stale socket file if it exists
+#[cfg(windows)]
+fn try_send_to_existing_instance(msg: &[u8]) -> bool {
+    let addr: SocketAddr = "127.0.0.1:42425".parse().unwrap();
+    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(50)) {
+        let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
+        let _ = stream.write_all(msg);
+        return true;
+    }
+    false
+}
+
+#[cfg(unix)]
+fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) {
+    let socket_path = get_socket_path();
     let _ = std::fs::remove_file(&socket_path);
 
-    // 3. Bind new Unix socket listener
     if let Ok(listener) = UnixListener::bind(&socket_path) {
         let path_clone = socket_path.clone();
         thread::spawn(move || {
             for stream in listener.incoming() {
-                if stream.is_ok() {
+                if let Ok(mut stream) = stream {
+                    let mut buf = [0u8; 8];
+                    let _ = stream.read(&mut buf);
+                    let cmd = String::from_utf8_lossy(&buf);
+
+                    if cmd.starts_with("quit") {
+                        let _ = std::fs::remove_file(&path_clone);
+                        let _ = slint::invoke_from_event_loop(|| {
+                            std::process::exit(0);
+                        });
+                        break;
+                    }
+
                     let _ = slint::invoke_from_event_loop({
                         let ui_weak = ui_handle.clone();
                         let exit_flag = exit_trigger.clone();
@@ -76,28 +100,26 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<
             let _ = std::fs::remove_file(&path_clone);
         });
     }
-
-    true
 }
 
 #[cfg(windows)]
-fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) -> bool {
+fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) {
     let addr: SocketAddr = "127.0.0.1:42425".parse().unwrap();
-    // 1. Try connecting with a fast timeout (50ms) to toggle existing instance
-    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(50)) {
-        let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
-        let _ = stream.write_all(b"toggle");
-        return false;
-    }
-
-    // 2. Bind TCP listener on localhost
     if let Ok(listener) = TcpListener::bind(addr) {
         thread::spawn(move || {
             for stream in listener.incoming() {
                 if let Ok(mut stream) = stream {
-                    let mut buf = [0u8; 6];
+                    let mut buf = [0u8; 8];
                     let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
                     let _ = stream.read(&mut buf);
+                    let cmd = String::from_utf8_lossy(&buf);
+
+                    if cmd.starts_with("quit") {
+                        let _ = slint::invoke_from_event_loop(|| {
+                            std::process::exit(0);
+                        });
+                        break;
+                    }
 
                     let _ = slint::invoke_from_event_loop({
                         let ui_weak = ui_handle.clone();
@@ -120,8 +142,6 @@ fn handle_single_instance(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<
             }
         });
     }
-
-    true
 }
 
 fn populate_items(
@@ -439,6 +459,40 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version" || a == "-v") {
+        println!("view-launcher {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!(
+            "View Launcher {}\nUsage: view-launcher [OPTIONS]\n\nOptions:\n  -d, --dmenu         Run in dmenu pipe mode\n  -p, --prompt <TEXT> Custom prompt in dmenu mode\n  -q, --quit          Quit running background launcher daemon\n  -v, --version       Show version\n  -h, --help          Show help",
+            env!("CARGO_PKG_VERSION")
+        );
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--quit" || a == "-q") {
+        #[cfg(unix)]
+        {
+            let socket_path = get_socket_path();
+            if let Ok(mut stream) = UnixStream::connect(&socket_path) {
+                let _ = stream.write_all(b"quit");
+                println!("view-launcher daemon stopped.");
+                return Ok(());
+            }
+        }
+        #[cfg(windows)]
+        {
+            let addr: SocketAddr = "127.0.0.1:42425".parse().unwrap();
+            if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(100)) {
+                let _ = stream.write_all(b"quit");
+                println!("view-launcher daemon stopped.");
+                return Ok(());
+            }
+        }
+        println!("view-launcher is not running.");
+        return Ok(());
+    }
+
     let is_dmenu = args.iter().any(|a| a == "--dmenu" || a == "-d");
     if is_dmenu {
         let mut prompt = "Select:".to_string();
@@ -453,18 +507,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return run_dmenu_mode(&prompt);
     }
 
-    let exit_trigger = Arc::new(AtomicBool::new(false));
-
-    // 1. Create main Slint Window
-    let ui = AppWindow::new()?;
-
-    // 2. Single-Instance Check
-    if !handle_single_instance(exit_trigger.clone(), ui.as_weak()) {
+    // 0. Super-fast single-instance check BEFORE allocating GPU or Window (<0.2ms!)
+    if try_send_to_existing_instance(b"toggle") {
         return Ok(());
     }
 
-    // Setup global shortcut on desktop environments (GNOME, etc.)
-    view_launcher::config::setup_global_shortcut();
+    let exit_trigger = Arc::new(AtomicBool::new(false));
+
+    // 1. Create main Slint Window for primary resident daemon
+    let ui = AppWindow::new()?;
+
+    // 2. Start background socket listener for instant wakeup
+    start_daemon_listener(exit_trigger.clone(), ui.as_weak());
+
+    // Setup global shortcut on desktop environments in background (non-blocking)
+    std::thread::spawn(|| {
+        view_launcher::config::setup_global_shortcut();
+    });
 
     // 3. Load Config & Initialize Engine
     let config = Config::load();
@@ -738,9 +797,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(item) = item_opt {
                 if let Some(ui) = ui_weak.upgrade() {
                     let _ = ui.hide();
+                    ui.set_search_text("".into());
+                    ui.set_is_expanded(false);
                 }
                 engine.launch(&item);
-                std::process::exit(0);
             }
         });
     }
@@ -764,9 +824,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(item) = item_opt {
                 if let Some(ui) = ui_weak.upgrade() {
                     let _ = ui.hide();
+                    ui.set_search_text("".into());
+                    ui.set_is_expanded(false);
                 }
                 engine.open_in_terminal(&item);
-                std::process::exit(0);
             }
         });
     }
@@ -868,8 +929,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui.on_close_window(move || {
             if let Some(ui) = ui_weak.upgrade() {
                 let _ = ui.hide();
+                ui.set_search_text("".into());
+                ui.set_is_expanded(false);
             }
-            std::process::exit(0);
         });
     }
 

@@ -28,11 +28,12 @@ pub struct IconResolver {
 
 impl IconResolver {
     pub fn new() -> Self {
-        #[allow(unused_mut)]
-        let mut path_index = HashMap::new();
+        let path_index = Arc::new(RwLock::new(HashMap::new()));
+        let index_clone = path_index.clone();
 
         #[cfg(not(target_os = "windows"))]
-        {
+        std::thread::spawn(move || {
+            let mut map = HashMap::new();
             let search_roots = [
                 "/usr/share/icons/Yaru",
                 "/usr/share/icons/hicolor",
@@ -48,8 +49,8 @@ impl IconResolver {
                     if path.is_file() {
                         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                             let key = stem.to_lowercase();
-                            if !path_index.contains_key(&key) {
-                                path_index.insert(key, path.to_path_buf());
+                            if !map.contains_key(&key) {
+                                map.insert(key, path.to_path_buf());
                             }
                         }
                     }
@@ -63,17 +64,21 @@ impl IconResolver {
                     if path.is_file() {
                         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                             let key = stem.to_lowercase();
-                            if !path_index.contains_key(&key) {
-                                path_index.insert(key, path.to_path_buf());
+                            if !map.contains_key(&key) {
+                                map.insert(key, path.to_path_buf());
                             }
                         }
                     }
                 }
             }
-        }
+
+            if let Ok(mut lock) = index_clone.write() {
+                *lock = map;
+            }
+        });
 
         Self {
-            icon_path_index: Arc::new(RwLock::new(path_index)),
+            icon_path_index: path_index,
             image_cache: Arc::new(RwLock::new(HashMap::new())),
             file_type_cache: Arc::new(RwLock::new(HashMap::new())),
         }
