@@ -354,10 +354,282 @@ pub fn format_result(val: f64) -> String {
             formatted
         }
     } else {
-        // Truncate trailing floating zeros
         let s = format!("{:.8}", val);
         let trimmed = s.trim_end_matches('0').trim_end_matches('.');
         trimmed.to_string()
+    }
+}
+
+/// Result of a smart unit or currency conversion.
+#[derive(Debug, PartialEq, Clone)]
+pub struct ConversionResult {
+    pub title: String,
+    pub subtitle: String,
+    pub value_to_copy: String,
+}
+
+/// Evaluates smart unit conversions and currency conversions offline.
+/// Examples:
+/// - "100 usd in vnd" -> "2,545,000 VND"
+/// - "50 km to mi" -> "31.07 mi"
+/// - "37 c to f" -> "98.6 °F"
+/// - "1024 mb in gb" -> "1 GB"
+/// - "72 hours in days" -> "3 days"
+pub fn evaluate_conversion(query: &str) -> Option<ConversionResult> {
+    let lower = query.trim().to_lowercase();
+    if lower.is_empty() {
+        return None;
+    }
+
+    // Must contain conversion keywords or 2 distinct unit tokens
+    let tokens: Vec<&str> = lower.split_whitespace().collect();
+    if tokens.is_empty() {
+        return None;
+    }
+
+    // Pattern 1: [number, from_unit, "in"|"to"|"=", to_unit]
+    // Pattern 2: [number, from_unit, to_unit]
+    // Pattern 3: [number_with_from_unit, "in"|"to"|"=", to_unit]
+    let (val, from_unit, to_unit) = parse_conversion_query(&tokens, &lower)?;
+
+    // 1. Try Temperature Conversion
+    if let Some((res_val, res_label, full_label)) = convert_temperature(val, &from_unit, &to_unit) {
+        let formatted = format_result(res_val);
+        let title = format!("{} {}", formatted, res_label);
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), full_label.0, title);
+        return Some(ConversionResult {
+            title,
+            subtitle,
+            value_to_copy: formatted,
+        });
+    }
+
+    // 2. Try Length Conversion
+    if let Some((res_val, res_label, from_label)) = convert_units_by_table(val, &from_unit, &to_unit, &LENGTH_TABLE) {
+        let formatted = format_result(res_val);
+        let title = format!("{} {}", formatted, res_label);
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label, title);
+        return Some(ConversionResult {
+            title,
+            subtitle,
+            value_to_copy: formatted,
+        });
+    }
+
+    // 3. Try Weight/Mass Conversion
+    if let Some((res_val, res_label, from_label)) = convert_units_by_table(val, &from_unit, &to_unit, &WEIGHT_TABLE) {
+        let formatted = format_result(res_val);
+        let title = format!("{} {}", formatted, res_label);
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label, title);
+        return Some(ConversionResult {
+            title,
+            subtitle,
+            value_to_copy: formatted,
+        });
+    }
+
+    // 4. Try Digital Storage Conversion
+    if let Some((res_val, res_label, from_label)) = convert_units_by_table(val, &from_unit, &to_unit, &STORAGE_TABLE) {
+        let formatted = format_result(res_val);
+        let title = format!("{} {}", formatted, res_label);
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label, title);
+        return Some(ConversionResult {
+            title,
+            subtitle,
+            value_to_copy: formatted,
+        });
+    }
+
+    // 5. Try Time Conversion
+    if let Some((res_val, res_label, from_label)) = convert_units_by_table(val, &from_unit, &to_unit, &TIME_TABLE) {
+        let formatted = format_result(res_val);
+        let title = format!("{} {}", formatted, res_label);
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label, title);
+        return Some(ConversionResult {
+            title,
+            subtitle,
+            value_to_copy: formatted,
+        });
+    }
+
+    // 6. Try Speed Conversion
+    if let Some((res_val, res_label, from_label)) = convert_units_by_table(val, &from_unit, &to_unit, &SPEED_TABLE) {
+        let formatted = format_result(res_val);
+        let title = format!("{} {}", formatted, res_label);
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label, title);
+        return Some(ConversionResult {
+            title,
+            subtitle,
+            value_to_copy: formatted,
+        });
+    }
+
+    // 7. Try Currency Conversion (Offline reference exchange rates)
+    if let Some((res_val, res_label, from_label)) = convert_units_by_table(val, &from_unit, &to_unit, &CURRENCY_TABLE) {
+        let formatted = format_result(res_val);
+        let title = format!("{} {}", formatted, res_label.to_uppercase());
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label.to_uppercase(), title);
+        return Some(ConversionResult {
+            title,
+            subtitle,
+            value_to_copy: formatted,
+        });
+    }
+
+    None
+}
+
+fn parse_conversion_query(tokens: &[&str], _full_lower: &str) -> Option<(f64, String, String)> {
+    if tokens.is_empty() {
+        return None;
+    }
+
+    // Check if first token starts with a number
+    let first = tokens[0];
+    let mut num_end = 0;
+    for (i, c) in first.chars().enumerate() {
+        if c.is_ascii_digit() || c == '.' || (i == 0 && c == '-') {
+            num_end = i + 1;
+        } else {
+            break;
+        }
+    }
+
+    if num_end > 0 {
+        let num_part = &first[..num_end];
+        let val: f64 = num_part.parse().ok()?;
+        let remaining_first = &first[num_end..];
+
+        if !remaining_first.is_empty() {
+            // Case "100usd in vnd" or "50km to mi"
+            let from_unit = remaining_first.to_string();
+            let mut target_idx = 1;
+            if target_idx < tokens.len() && (tokens[target_idx] == "in" || tokens[target_idx] == "to" || tokens[target_idx] == "=" || tokens[target_idx] == "->") {
+                target_idx += 1;
+            }
+            if target_idx < tokens.len() {
+                let to_unit = tokens[target_idx].to_string();
+                return Some((val, from_unit, to_unit));
+            }
+        } else {
+            // Case "100 usd in vnd" or "100 usd vnd"
+            if tokens.len() >= 3 {
+                let from_unit = tokens[1].to_string();
+                let mut target_idx = 2;
+                if tokens[target_idx] == "in" || tokens[target_idx] == "to" || tokens[target_idx] == "=" || tokens[target_idx] == "->" {
+                    target_idx += 1;
+                }
+                if target_idx < tokens.len() {
+                    let to_unit = tokens[target_idx].to_string();
+                    return Some((val, from_unit, to_unit));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+struct UnitDef {
+    aliases: &'static [&'static str],
+    factor_to_base: f64,
+    canonical_name: &'static str,
+}
+
+const LENGTH_TABLE: &[UnitDef] = &[
+    UnitDef { aliases: &["km", "kilometer", "kilometers", "kmh"], factor_to_base: 1000.0, canonical_name: "km" },
+    UnitDef { aliases: &["m", "meter", "meters", "metre"], factor_to_base: 1.0, canonical_name: "m" },
+    UnitDef { aliases: &["cm", "centimeter", "centimeters"], factor_to_base: 0.01, canonical_name: "cm" },
+    UnitDef { aliases: &["mm", "millimeter", "millimeters"], factor_to_base: 0.001, canonical_name: "mm" },
+    UnitDef { aliases: &["mi", "mile", "miles"], factor_to_base: 1609.344, canonical_name: "mi" },
+    UnitDef { aliases: &["yd", "yard", "yards"], factor_to_base: 0.9144, canonical_name: "yd" },
+    UnitDef { aliases: &["ft", "feet", "foot"], factor_to_base: 0.3048, canonical_name: "ft" },
+    UnitDef { aliases: &["in", "inch", "inches"], factor_to_base: 0.0254, canonical_name: "in" },
+];
+
+const WEIGHT_TABLE: &[UnitDef] = &[
+    UnitDef { aliases: &["kg", "kilogram", "kilograms", "kilo", "kilos"], factor_to_base: 1000.0, canonical_name: "kg" },
+    UnitDef { aliases: &["g", "gram", "grams"], factor_to_base: 1.0, canonical_name: "g" },
+    UnitDef { aliases: &["mg", "milligram", "milligrams"], factor_to_base: 0.001, canonical_name: "mg" },
+    UnitDef { aliases: &["lb", "lbs", "pound", "pounds"], factor_to_base: 453.59237, canonical_name: "lbs" },
+    UnitDef { aliases: &["oz", "ounce", "ounces"], factor_to_base: 28.349523, canonical_name: "oz" },
+    UnitDef { aliases: &["ton", "tons", "tonne"], factor_to_base: 1000000.0, canonical_name: "tons" },
+];
+
+const STORAGE_TABLE: &[UnitDef] = &[
+    UnitDef { aliases: &["b", "byte", "bytes"], factor_to_base: 1.0, canonical_name: "B" },
+    UnitDef { aliases: &["kb", "kilobyte", "kilobytes"], factor_to_base: 1024.0, canonical_name: "KB" },
+    UnitDef { aliases: &["mb", "megabyte", "megabytes"], factor_to_base: 1024.0 * 1024.0, canonical_name: "MB" },
+    UnitDef { aliases: &["gb", "gigabyte", "gigabytes"], factor_to_base: 1024.0 * 1024.0 * 1024.0, canonical_name: "GB" },
+    UnitDef { aliases: &["tb", "terabyte", "terabytes"], factor_to_base: 1024.0 * 1024.0 * 1024.0 * 1024.0, canonical_name: "TB" },
+    UnitDef { aliases: &["pb", "petabyte"], factor_to_base: 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0, canonical_name: "PB" },
+];
+
+const TIME_TABLE: &[UnitDef] = &[
+    UnitDef { aliases: &["s", "sec", "secs", "second", "seconds", "giây"], factor_to_base: 1.0, canonical_name: "seconds" },
+    UnitDef { aliases: &["m", "min", "mins", "minute", "minutes", "phút"], factor_to_base: 60.0, canonical_name: "minutes" },
+    UnitDef { aliases: &["h", "hr", "hrs", "hour", "hours", "giờ"], factor_to_base: 3600.0, canonical_name: "hours" },
+    UnitDef { aliases: &["d", "day", "days", "ngày"], factor_to_base: 86400.0, canonical_name: "days" },
+    UnitDef { aliases: &["w", "week", "weeks", "tuần"], factor_to_base: 604800.0, canonical_name: "weeks" },
+    UnitDef { aliases: &["mo", "month", "months", "tháng"], factor_to_base: 2592000.0, canonical_name: "months" },
+    UnitDef { aliases: &["y", "yr", "yrs", "year", "years", "năm"], factor_to_base: 31536000.0, canonical_name: "years" },
+];
+
+const SPEED_TABLE: &[UnitDef] = &[
+    UnitDef { aliases: &["m/s", "mps"], factor_to_base: 1.0, canonical_name: "m/s" },
+    UnitDef { aliases: &["km/h", "kmh", "kph"], factor_to_base: 1.0 / 3.6, canonical_name: "km/h" },
+    UnitDef { aliases: &["mph", "mi/h"], factor_to_base: 0.44704, canonical_name: "mph" },
+];
+
+// Offline reference rate with base = 1.0 USD
+const CURRENCY_TABLE: &[UnitDef] = &[
+    UnitDef { aliases: &["usd", "$", "dollar", "bucks"], factor_to_base: 1.0, canonical_name: "USD" },
+    UnitDef { aliases: &["vnd", "đ", "dong", "đồng", "vnđ"], factor_to_base: 1.0 / 25450.0, canonical_name: "VND" },
+    UnitDef { aliases: &["eur", "€", "euro"], factor_to_base: 1.0 / 0.92, canonical_name: "EUR" },
+    UnitDef { aliases: &["jpy", "¥", "yen"], factor_to_base: 1.0 / 152.0, canonical_name: "JPY" },
+    UnitDef { aliases: &["gbp", "£", "pound", "quid"], factor_to_base: 1.0 / 0.79, canonical_name: "GBP" },
+    UnitDef { aliases: &["cny", "rmb", "yuan"], factor_to_base: 1.0 / 7.24, canonical_name: "CNY" },
+    UnitDef { aliases: &["sgd"], factor_to_base: 1.0 / 1.35, canonical_name: "SGD" },
+    UnitDef { aliases: &["krw", "won"], factor_to_base: 1.0 / 1380.0, canonical_name: "KRW" },
+    UnitDef { aliases: &["thb", "baht"], factor_to_base: 1.0 / 36.5, canonical_name: "THB" },
+    UnitDef { aliases: &["aud"], factor_to_base: 1.0 / 1.54, canonical_name: "AUD" },
+    UnitDef { aliases: &["cad"], factor_to_base: 1.0 / 1.38, canonical_name: "CAD" },
+];
+
+fn convert_units_by_table(val: f64, from_u: &str, to_u: &str, table: &[UnitDef]) -> Option<(f64, &'static str, &'static str)> {
+    let from_def = table.iter().find(|u| u.aliases.iter().any(|&a| a == from_u))?;
+    let to_def = table.iter().find(|u| u.aliases.iter().any(|&a| a == to_u))?;
+
+    let val_in_base = val * from_def.factor_to_base;
+    let res = val_in_base / to_def.factor_to_base;
+    Some((res, to_def.canonical_name, from_def.canonical_name))
+}
+
+fn convert_temperature(val: f64, from_u: &str, to_u: &str) -> Option<(f64, &'static str, (&'static str, &'static str))> {
+    let is_c = |u: &str| u == "c" || u == "celsius" || u == "°c" || u == "do c" || u == "độ c";
+    let is_f = |u: &str| u == "f" || u == "fahrenheit" || u == "°f" || u == "do f" || u == "độ f";
+    let is_k = |u: &str| u == "k" || u == "kelvin";
+
+    if is_c(from_u) && is_f(to_u) {
+        let res = (val * 9.0 / 5.0) + 32.0;
+        Some((res, "°F", ("°C", "°F")))
+    } else if is_f(from_u) && is_c(to_u) {
+        let res = (val - 32.0) * 5.0 / 9.0;
+        Some((res, "°C", ("°F", "°C")))
+    } else if is_c(from_u) && is_k(to_u) {
+        let res = val + 273.15;
+        Some((res, "K", ("°C", "K")))
+    } else if is_k(from_u) && is_c(to_u) {
+        let res = val - 273.15;
+        Some((res, "°C", ("K", "°C")))
+    } else if is_f(from_u) && is_k(to_u) {
+        let res = (val - 32.0) * 5.0 / 9.0 + 273.15;
+        Some((res, "K", ("°F", "K")))
+    } else if is_k(from_u) && is_f(to_u) {
+        let res = (val - 273.15) * 9.0 / 5.0 + 32.0;
+        Some((res, "°F", ("K", "°F")))
+    } else {
+        None
     }
 }
 
@@ -386,6 +658,24 @@ mod tests {
         assert_eq!(format_result(1024.0), "1,024");
         assert_eq!(format_result(1000000.0), "1,000,000");
         assert_eq!(format_result(3.14159), "3.14159");
+    }
+
+    #[test]
+    fn test_unit_conversions() {
+        let c1 = evaluate_conversion("50 km to mi").unwrap();
+        assert!(c1.title.contains("mi"));
+
+        let c2 = evaluate_conversion("37 c to f").unwrap();
+        assert_eq!(c2.title, "98.6 °F");
+
+        let c3 = evaluate_conversion("1024 mb in gb").unwrap();
+        assert_eq!(c3.title, "1 GB");
+
+        let c4 = evaluate_conversion("72 hours in days").unwrap();
+        assert_eq!(c4.title, "3 days");
+
+        let c5 = evaluate_conversion("100 usd in vnd").unwrap();
+        assert!(c5.title.contains("VND"));
     }
 
     #[test]

@@ -888,7 +888,133 @@ impl LauncherEngine {
             return results;
         }
 
-        // 2. Chế độ mặc định: Tính toán nhanh nếu là biểu thức toán
+        // 5. Chế độ tìm kiếm Emoji (@emoji, @e, hoặc bắt đầu bằng dấu ':')
+        let is_emoji_mode = trimmed_query.starts_with("@emoji")
+            || trimmed_query.starts_with("@e ")
+            || trimmed_query == "@e"
+            || trimmed_query.starts_with(':');
+
+        if is_emoji_mode {
+            let emoji_query = if trimmed_query.starts_with("@emoji ") {
+                trimmed_query[7..].trim()
+            } else if trimmed_query.starts_with("@e ") {
+                trimmed_query[3..].trim()
+            } else if trimmed_query.starts_with(':') {
+                trimmed_query[1..].trim().trim_end_matches(':')
+            } else {
+                ""
+            };
+            let emoji_items = crate::emoji::search_emojis(emoji_query);
+            for item in emoji_items {
+                results.push((item, Vec::new()));
+            }
+            return results;
+        }
+
+        // 6. Chế độ Custom Script Plugins (~/.config/view-launcher/plugins/)
+        if trimmed_query.starts_with('@') && !is_win_mode && !is_clip_mode && !is_sys_mode && !is_file_mode && !is_emoji_mode {
+            let plugins = crate::plugins::discover_plugins();
+            let after_at = &trimmed_query[1..];
+            let mut parts = after_at.splitn(2, ' ');
+            let target_plugin = parts.next().unwrap_or("").to_lowercase();
+            let plugin_query = parts.next().unwrap_or("");
+
+            if let Some(plugin) = plugins.iter().find(|p| p.name == target_plugin) {
+                let items = crate::plugins::execute_plugin(plugin, plugin_query);
+                for item in items {
+                    results.push((item, Vec::new()));
+                }
+                return results;
+            } else if target_plugin.is_empty() {
+                // Liệt kê danh sách tất cả các chế độ & plugin tùy chỉnh
+                results.push((
+                    LauncherItem::new(
+                        "@w - Window Switcher".to_string(),
+                        "@w".to_string(),
+                        ItemType::Calc,
+                        Some("Switch between active running windows".to_string()),
+                        false,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
+                results.push((
+                    LauncherItem::new(
+                        "@c - Clipboard History".to_string(),
+                        "@c".to_string(),
+                        ItemType::Calc,
+                        Some("Browse and paste clipboard history".to_string()),
+                        false,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
+                results.push((
+                    LauncherItem::new(
+                        "@sys - System Actions".to_string(),
+                        "@sys".to_string(),
+                        ItemType::Calc,
+                        Some("Lock, Sleep, Restart, Shutdown".to_string()),
+                        false,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
+                results.push((
+                    LauncherItem::new(
+                        "@f - File Search".to_string(),
+                        "@f".to_string(),
+                        ItemType::Calc,
+                        Some("Search files and browse directories".to_string()),
+                        false,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
+                results.push((
+                    LauncherItem::new(
+                        "@emoji - Emoji Picker".to_string(),
+                        "@emoji".to_string(),
+                        ItemType::Calc,
+                        Some("Search emojis in English or Vietnamese (:fire)".to_string()),
+                        false,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
+                for p in plugins {
+                    results.push((
+                        LauncherItem::new(
+                            format!("@{} - Custom Script Plugin", p.name),
+                            format!("@{}", p.name),
+                            ItemType::Calc,
+                            Some(format!("Run script: {}", p.path.display())),
+                            false,
+                            None,
+                        ),
+                        Vec::new(),
+                    ));
+                }
+                return results;
+            }
+        }
+
+        // 7. Chuyển đổi thông minh Offline (Unit & Currency Converter)
+        if let Some(conv) = calc::evaluate_conversion(trimmed_query) {
+            results.push((
+                LauncherItem::new(
+                    conv.title.clone(),
+                    conv.value_to_copy.clone(),
+                    ItemType::Calc,
+                    Some(conv.subtitle),
+                    false,
+                    None,
+                ),
+                Vec::new(),
+            ));
+        }
+
+        // 8. Chế độ mặc định: Tính toán nhanh nếu là biểu thức toán
         if let Some(calc_val) = calc::evaluate(trimmed_query) {
             let formatted = calc::format_result(calc_val);
             results.push((
@@ -1443,6 +1569,47 @@ mod tests {
         let engine = LauncherEngine::new(config);
         let clip_results = engine.search("@c");
         assert!(clip_results.iter().all(|(item, _)| item.item_type == ItemType::Clipboard));
+    }
+
+    #[test]
+    fn test_emoji_search() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+        
+        let e1 = engine.search("@emoji fire");
+        assert!(!e1.is_empty());
+        assert!(e1.iter().any(|(item, _)| item.name.contains("🔥")));
+
+        let e2 = engine.search(":rocket");
+        assert!(!e2.is_empty());
+        assert!(e2.iter().any(|(item, _)| item.name.contains("🚀")));
+    }
+
+    #[test]
+    fn test_unit_and_currency_search() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+
+        let conv1 = engine.search("100 usd in vnd");
+        assert!(!conv1.is_empty());
+        assert!(conv1.iter().any(|(item, _)| item.name.contains("VND")));
+
+        let conv2 = engine.search("37 c to f");
+        assert!(!conv2.is_empty());
+        assert!(conv2.iter().any(|(item, _)| item.name.contains("98.6 °F")));
+    }
+
+    #[test]
+    fn test_custom_plugins_overview() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+
+        let modes = engine.search("@");
+        assert!(!modes.is_empty());
+        assert!(modes.iter().any(|(item, _)| item.name.contains("@w")));
+        assert!(modes.iter().any(|(item, _)| item.name.contains("@c")));
+        assert!(modes.iter().any(|(item, _)| item.name.contains("@sys")));
+        assert!(modes.iter().any(|(item, _)| item.name.contains("@emoji")));
     }
 }
 
