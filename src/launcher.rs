@@ -1159,13 +1159,40 @@ impl LauncherEngine {
             (0, Vec::new())
         };
 
-        if score_orig >= score_accent && score_orig > 0 {
-            Some((score_orig, indices_orig))
+        let (base_score, indices) = if score_orig >= score_accent && score_orig > 0 {
+            (score_orig, indices_orig)
         } else if score_accent > 0 {
-            Some((score_accent, indices_accent))
+            (score_accent, indices_accent)
         } else {
-            None
+            return None;
+        };
+
+        let bonus = Self::calculate_tier_bonus(name_normalized, query_normalized);
+        Some((base_score + bonus, indices))
+    }
+
+    #[inline]
+    fn calculate_tier_bonus(name_normalized: &str, query_normalized: &str) -> i64 {
+        if query_normalized.is_empty() {
+            return 0;
         }
+
+        // Tier 1: Exact prefix ("image viewer" starts with "image") -> +350 bonus
+        if name_normalized.starts_with(query_normalized) {
+            return 350;
+        }
+
+        // Tier 2: Word-boundary prefix ("gnome image editor" has word starting with "image") -> +200 bonus
+        if name_normalized.split_whitespace().any(|word| word.starts_with(query_normalized)) {
+            return 200;
+        }
+
+        // Tier 3: Consecutive substring ("fastimage" contains "image") -> +100 bonus
+        if name_normalized.contains(query_normalized) {
+            return 100;
+        }
+
+        0
     }
 
     fn match_item(&self, text: &str, query: &str) -> Option<(i64, Vec<usize>)> {
@@ -1611,6 +1638,34 @@ mod tests {
         assert!(modes.iter().any(|(item, _)| item.name.contains("@sys")));
         assert!(modes.iter().any(|(item, _)| item.name.contains("@emoji")));
     }
+
+    #[test]
+    fn test_prefix_and_tiered_ranking() {
+        let mut config = Config::default();
+        config.apps.custom.push(crate::config::CustomAppConfig {
+            name: "Extension Manager".to_string(),
+            exec: "extension-manager".to_string(),
+            description: None,
+            terminal: false,
+            icon: None,
+            category: None,
+        });
+        config.apps.custom.push(crate::config::CustomAppConfig {
+            name: "Image Viewer".to_string(),
+            exec: "image-viewer".to_string(),
+            description: None,
+            terminal: false,
+            icon: None,
+            category: None,
+        });
+        let engine = LauncherEngine::new(config);
+
+        let results = engine.search("image");
+        assert!(results.len() >= 2);
+        // Image Viewer must rank at #0 above Extension Manager
+        assert_eq!(results[0].0.name, "Image Viewer");
+    }
 }
+
 
 
