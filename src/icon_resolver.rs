@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::launcher::{LauncherItem, ItemType};
 
 const SVG_FOLDER: &str = r##"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" fill="#EBCB8B" stroke="#D08770" stroke-width="1.2"/></svg>"##;
@@ -24,65 +25,127 @@ pub struct IconResolver {
     icon_path_index: Arc<RwLock<HashMap<String, PathBuf>>>,
     image_cache: Arc<RwLock<HashMap<String, Option<slint::Image>>>>,
     file_type_cache: Arc<RwLock<HashMap<&'static str, slint::Image>>>,
+    indexing_done: Arc<AtomicBool>,
 }
 
 impl IconResolver {
     pub fn new() -> Self {
         let path_index = Arc::new(RwLock::new(HashMap::new()));
+        let image_cache: Arc<RwLock<HashMap<String, Option<slint::Image>>>> = Arc::new(RwLock::new(HashMap::new()));
+        let indexing_done = Arc::new(AtomicBool::new(false));
 
         #[cfg(not(target_os = "windows"))]
         {
             let index_clone = path_index.clone();
+            let indexing_done_clone = indexing_done.clone();
+
             std::thread::spawn(move || {
-            let mut map = HashMap::new();
-            let search_roots = [
-                "/usr/share/icons/Yaru",
-                "/usr/share/icons/hicolor",
-                "/usr/share/icons/Adwaita",
-                "/usr/share/icons/Humanity",
-                "/usr/share/icons/HighContrast",
-                "/usr/share/pixmaps",
-            ];
+                let mut map: HashMap<String, (PathBuf, u8)> = HashMap::new();
+                let mut search_roots = vec![
+                    PathBuf::from("/usr/share/icons/Yaru"),
+                    PathBuf::from("/usr/share/icons/hicolor"),
+                    PathBuf::from("/usr/share/icons/Adwaita"),
+                    PathBuf::from("/usr/share/icons/Humanity"),
+                    PathBuf::from("/usr/share/icons/HighContrast"),
+                    PathBuf::from("/usr/share/icons/Papirus"),
+                    PathBuf::from("/usr/share/icons/breeze"),
+                    PathBuf::from("/usr/share/pixmaps"),
+                    PathBuf::from("/var/lib/snapd/desktop/icons"),
+                    PathBuf::from("/var/lib/flatpak/exports/share/icons"),
+                ];
 
-            for root in &search_roots {
-                for entry in walkdir::WalkDir::new(root).max_depth(4).into_iter().flatten() {
-                    let path = entry.path();
-                    if path.is_file() {
-                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            let key = stem.to_lowercase();
-                            if !map.contains_key(&key) {
-                                map.insert(key, path.to_path_buf());
+                if let Some(home) = dirs::home_dir() {
+                    search_roots.push(home.join(".local/share/icons"));
+                    search_roots.push(home.join(".local/share/flatpak/exports/share/icons"));
+                }
+
+                if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
+                    for dir in xdg_data_dirs.split(':') {
+                        let p = PathBuf::from(dir).join("icons");
+                        if !search_roots.contains(&p) {
+                            search_roots.push(p);
+                        }
+                    }
+                }
+
+                for root in search_roots {
+                    if !root.exists() {
+                        continue;
+                    }
+                    for entry in walkdir::WalkDir::new(&root).max_depth(5).into_iter().flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                                let ext_lower = ext.to_lowercase();
+                                if ext_lower != "png" && ext_lower != "svg" && ext_lower != "xpm" && ext_lower != "ico" {
+                                    continue;
+                                }
+
+                                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                                    let key = stem.to_lowercase();
+                                    let path_str = path.to_string_lossy();
+
+                                    // Priority score: Scalable SVG (5) > 256/128/64/48 PNG (4) > 32/24 PNG (3) > 16 PNG (2) > Symbolic SVG (1)
+                                    let score = if path_str.contains("symbolic") {
+                                        1
+                                    } else if ext_lower == "svg" {
+                                        5
+                                    } else if path_str.contains("256x256") || path_str.contains("128x128") || path_str.contains("scalable") {
+                                        5
+                                    } else if path_str.contains("64x64") || path_str.contains("48x48") {
+                                        4
+                                    } else if path_str.contains("32x32") || path_str.contains("24x24") {
+                                        3
+                                    } else {
+                                        2
+                                    };
+
+                                    let insert_key = |map: &mut HashMap<String, (PathBuf, u8)>, k: String, p: PathBuf, s: u8| {
+                                        if let Some((_, old_score)) = map.get(&k) {
+                                            if s > *old_score {
+                                                map.insert(k, (p, s));
+                                            }
+                                        } else {
+                                            map.insert(k, (p, s));
+                                        }
+                                    };
+
+                                    // 1. Exact stem (e.g. "org.gnome.texteditor", "firefox")
+                                    insert_key(&mut map, key.clone(), path.to_path_buf(), score);
+
+                                    // 2. Strip "-symbolic" if present
+                                    if key.ends_with("-symbolic") {
+                                        let non_sym = key.trim_end_matches("-symbolic").to_string();
+                                        insert_key(&mut map, non_sym, path.to_path_buf(), 1);
+                                    }
+
+                                    // 3. If reverse domain (e.g. "com.mattjakeman.extensionmanager"), also index last segment ("extensionmanager")
+                                    if let Some(last_seg) = key.split('.').last() {
+                                        if last_seg.len() > 2 && last_seg != key {
+                                            insert_key(&mut map, last_seg.to_string(), path.to_path_buf(), score);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            if let Some(home) = dirs::home_dir() {
-                let user_icons = home.join(".local/share/icons");
-                for entry in walkdir::WalkDir::new(user_icons).max_depth(4).into_iter().flatten() {
-                    let path = entry.path();
-                    if path.is_file() {
-                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            let key = stem.to_lowercase();
-                            if !map.contains_key(&key) {
-                                map.insert(key, path.to_path_buf());
-                            }
-                        }
-                    }
+                let final_map: HashMap<String, PathBuf> = map.into_iter().map(|(k, (p, _))| (k, p)).collect();
+
+                if let Ok(mut lock) = index_clone.write() {
+                    *lock = final_map;
                 }
-            }
 
-            if let Ok(mut lock) = index_clone.write() {
-                *lock = map;
-            }
-        });
+                indexing_done_clone.store(true, Ordering::SeqCst);
+            });
         }
 
         Self {
             icon_path_index: path_index,
-            image_cache: Arc::new(RwLock::new(HashMap::new())),
+            image_cache,
             file_type_cache: Arc::new(RwLock::new(HashMap::new())),
+            indexing_done,
         }
     }
 
@@ -198,10 +261,14 @@ impl IconResolver {
             return None;
         }
 
-        // 1. Instant Cache Hit
+        // 1. Instant Cache Hit (only return cached None if indexing has completed)
         if let Ok(guard) = self.image_cache.read() {
             if let Some(cached) = guard.get(key) {
-                return cached.clone();
+                if let Some(ref img) = *cached {
+                    return Some(img.clone());
+                } else if self.indexing_done.load(Ordering::Relaxed) {
+                    return None;
+                }
             }
         }
 
@@ -209,9 +276,11 @@ impl IconResolver {
         let resolved_path = self.find_icon_path(icon_hint, app_name, exec_or_path);
         let slint_img = resolved_path.and_then(|p| Self::load_downscaled_icon(&p));
 
-        // 3. Store in cache
+        // 3. Store in cache (only store None if background indexing has completed)
         if let Ok(mut guard) = self.image_cache.write() {
-            guard.insert(key.to_string(), slint_img.clone());
+            if slint_img.is_some() || self.indexing_done.load(Ordering::Relaxed) {
+                guard.insert(key.to_string(), slint_img.clone());
+            }
         }
 
         slint_img
@@ -276,7 +345,7 @@ impl IconResolver {
     fn find_icon_path(&self, #[allow(unused_variables)] icon_hint: Option<&str>, #[allow(unused_variables)] app_name: &str, #[allow(unused_variables)] exec_or_path: &str) -> Option<PathBuf> {
         #[cfg(not(target_os = "windows"))]
         {
-            // Direct absolute path
+            // 1. Direct absolute path
             if let Some(hint) = icon_hint {
                 let p = PathBuf::from(hint);
                 if p.is_absolute() && p.exists() {
@@ -285,25 +354,61 @@ impl IconResolver {
             }
 
             if let Ok(index) = self.icon_path_index.read() {
-                // Check icon hint
+                // 2. Check icon hint variations
                 if let Some(hint) = icon_hint {
-                    let k = hint.to_lowercase();
-                    if let Some(path) = index.get(&k) {
+                    let h_lower = hint.to_lowercase();
+                    // a. Exact lowercase
+                    if let Some(path) = index.get(&h_lower) {
                         return Some(path.clone());
+                    }
+                    // b. Strip extension (.png, .svg, .xpm, .ico)
+                    let h_no_ext = h_lower.trim_end_matches(".png").trim_end_matches(".svg").trim_end_matches(".xpm").trim_end_matches(".ico");
+                    if let Some(path) = index.get(h_no_ext) {
+                        return Some(path.clone());
+                    }
+                    // c. Strip -symbolic
+                    if h_no_ext.ends_with("-symbolic") {
+                        let h_no_sym = h_no_ext.trim_end_matches("-symbolic");
+                        if let Some(path) = index.get(h_no_sym) {
+                            return Some(path.clone());
+                        }
+                    }
+                    // d. Reverse-domain last segment (e.g. "com.mattjakeman.ExtensionManager" -> "extensionmanager")
+                    if let Some(last_seg) = h_no_ext.split('.').last() {
+                        if last_seg.len() > 2 && last_seg != h_no_ext {
+                            if let Some(path) = index.get(last_seg) {
+                                return Some(path.clone());
+                            }
+                        }
                     }
                 }
 
-                // Check app name
+                // 3. Check app name variations
                 let name_key = app_name.to_lowercase();
                 if let Some(path) = index.get(&name_key) {
                     return Some(path.clone());
                 }
+                // App name without spaces (e.g. "Text Editor" -> "texteditor", "Extension Manager" -> "extensionmanager")
+                let name_compact: String = name_key.chars().filter(|c| c.is_alphanumeric()).collect();
+                if !name_compact.is_empty() && name_compact != name_key {
+                    if let Some(path) = index.get(&name_compact) {
+                        return Some(path.clone());
+                    }
+                }
 
-                // Check executable name
+                // 4. Check executable name variations
                 if let Some(bin) = Path::new(exec_or_path).file_name().and_then(|f| f.to_str()) {
                     let bin_clean = bin.split_whitespace().next().unwrap_or("").to_lowercase();
                     if let Some(path) = index.get(&bin_clean) {
                         return Some(path.clone());
+                    }
+                    // Executable without '-' or '_' (e.g. "gnome-text-editor" -> "texteditor" or "gnometexteditor")
+                    if let Some(last_bin) = bin_clean.split('-').last() {
+                        if last_bin.len() > 2 && last_bin != bin_clean {
+                            if let Some(path) = index.get(last_bin) {
+                                return Some(path.clone());
+                            }
+                        }
                     }
                 }
             }
@@ -320,5 +425,31 @@ impl IconResolver {
                 None
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_icon_resolver_basic() {
+        let resolver = IconResolver::new();
+        let start = std::time::Instant::now();
+        while !resolver.indexing_done.load(Ordering::SeqCst) && start.elapsed().as_secs() < 3 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+
+        let p_ext = resolver.find_icon_path(Some("com.mattjakeman.ExtensionManager"), "Extension Manager", "extension-manager");
+        println!("Extension Manager icon path: {:?}", p_ext);
+
+        let p_text = resolver.find_icon_path(Some("org.gnome.TextEditor"), "Text Editor", "gnome-text-editor");
+        println!("Text Editor icon path: {:?}", p_text);
+
+        let ext_icon = resolver.resolve_icon(Some("com.mattjakeman.ExtensionManager"), "Extension Manager", "extension-manager");
+        assert!(ext_icon.is_some(), "Extension Manager icon should resolve");
+
+        let text_icon = resolver.resolve_icon(Some("org.gnome.TextEditor"), "Text Editor", "gnome-text-editor");
+        assert!(text_icon.is_some(), "Text Editor icon should resolve");
     }
 }
