@@ -141,6 +141,11 @@ impl IconResolver {
             });
         }
 
+        #[cfg(target_os = "windows")]
+        {
+            indexing_done.store(true, Ordering::SeqCst);
+        }
+
         Self {
             icon_path_index: path_index,
             image_cache,
@@ -345,10 +350,10 @@ impl IconResolver {
     fn find_icon_path(&self, #[allow(unused_variables)] icon_hint: Option<&str>, #[allow(unused_variables)] app_name: &str, #[allow(unused_variables)] exec_or_path: &str) -> Option<PathBuf> {
         #[cfg(not(target_os = "windows"))]
         {
-            // 1. Direct absolute path
+            // 1. Direct path
             if let Some(hint) = icon_hint {
                 let p = PathBuf::from(hint);
-                if p.is_absolute() && p.exists() {
+                if p.exists() {
                     return Some(p);
                 }
             }
@@ -418,18 +423,31 @@ impl IconResolver {
 
         #[cfg(target_os = "windows")]
         {
+            let is_supported_image = |p: &Path| -> bool {
+                p.extension().map_or(false, |ext| {
+                    let ext_str = ext.to_string_lossy();
+                    ext_str.eq_ignore_ascii_case("ico") 
+                        || ext_str.eq_ignore_ascii_case("png") 
+                        || ext_str.eq_ignore_ascii_case("svg")
+                        || ext_str.eq_ignore_ascii_case("jpg")
+                        || ext_str.eq_ignore_ascii_case("jpeg")
+                        || ext_str.eq_ignore_ascii_case("webp")
+                        || ext_str.eq_ignore_ascii_case("bmp")
+                        || ext_str.eq_ignore_ascii_case("gif")
+                })
+            };
+
             if let Some(hint) = icon_hint {
                 let p = PathBuf::from(hint);
-                if p.exists() && (p.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("ico") || ext.eq_ignore_ascii_case("png"))) {
+                if p.exists() && is_supported_image(&p) {
                     return Some(p);
                 }
             }
             let p = PathBuf::from(exec_or_path);
-            if p.exists() && (p.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("ico") || ext.eq_ignore_ascii_case("png"))) {
-                Some(p)
-            } else {
-                None
+            if p.exists() && is_supported_image(&p) {
+                return Some(p);
             }
+            None
         }
     }
 }
