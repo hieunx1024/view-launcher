@@ -338,31 +338,84 @@ pub fn evaluate(input: &str) -> Option<f64> {
     }
 }
 
-/// Formats a float calculation result cleanly with thousand separators for integers.
+/// Formats a float calculation result cleanly with thousand separators for both integer and decimal numbers.
 pub fn format_result(val: f64) -> String {
-    if val.fract() == 0.0 && val.abs() < 1e15 {
-        let int_val = val as i64;
-        let s = int_val.to_string();
-        let is_negative = s.starts_with('-');
-        let digits = if is_negative { &s[1..] } else { &s };
-        
-        let mut formatted = String::new();
-        let len = digits.len();
-        for (i, c) in digits.chars().enumerate() {
-            if i > 0 && (len - i) % 3 == 0 {
-                formatted.push(',');
-            }
-            formatted.push(c);
-        }
+    format_number_with_separators(val, 6)
+}
+
+/// Formats any float with thousand separators on the integer part and trimmed decimals.
+pub fn format_number_with_separators(val: f64, max_decimals: usize) -> String {
+    if !val.is_finite() {
+        return val.to_string();
+    }
+
+    let is_negative = val < 0.0;
+    let abs_val = val.abs();
+
+    if abs_val.fract() == 0.0 && abs_val < 1e15 {
+        let int_val = abs_val as u64;
+        let formatted = format_integer_separators(int_val);
         if is_negative {
             format!("-{}", formatted)
         } else {
             formatted
         }
     } else {
-        let s = format!("{:.8}", val);
-        let trimmed = s.trim_end_matches('0').trim_end_matches('.');
-        trimmed.to_string()
+        let rounded = format!("{:.1$}", abs_val, max_decimals);
+        let trimmed = rounded.trim_end_matches('0').trim_end_matches('.');
+        
+        let parts: Vec<&str> = trimmed.split('.').collect();
+        let int_part: u64 = parts[0].parse().unwrap_or(0);
+        let int_formatted = format_integer_separators(int_part);
+
+        let final_str = if parts.len() > 1 && !parts[1].is_empty() {
+            format!("{}.{}", int_formatted, parts[1])
+        } else {
+            int_formatted
+        };
+
+        if is_negative {
+            format!("-{}", final_str)
+        } else {
+            final_str
+        }
+    }
+}
+
+fn format_integer_separators(mut n: u64) -> String {
+    if n == 0 {
+        return "0".to_string();
+    }
+    let mut s = String::new();
+    let mut count = 0;
+    while n > 0 {
+        if count > 0 && count % 3 == 0 {
+            s.push(',');
+        }
+        s.push(char::from_digit((n % 10) as u32, 10).unwrap());
+        n /= 10;
+        count += 1;
+    }
+    s.chars().rev().collect()
+}
+
+/// Formats currency values following standard financial conventions:
+/// - VND, JPY, KRW, IDR: No decimals (e.g. "26,062 VND")
+/// - USD, EUR, GBP, etc.: 2 decimals (e.g. "98.23 USD")
+pub fn format_currency(val: f64, currency_code: &str) -> String {
+    let code = currency_code.to_uppercase();
+    match code.as_str() {
+        "VND" | "JPY" | "KRW" | "IDR" | "CLP" | "HUF" | "TWD" => {
+            let rounded = val.round();
+            format_number_with_separators(rounded, 0)
+        }
+        _ => {
+            if val.fract() == 0.0 {
+                format_number_with_separators(val, 0)
+            } else {
+                format_number_with_separators(val, 2)
+            }
+        }
     }
 }
 
@@ -472,9 +525,10 @@ pub fn evaluate_conversion(query: &str) -> Option<ConversionResult> {
 
     // 7. Try Currency Conversion (Dynamic live rates or offline fallback)
     if let Some((res_val, res_label, from_label)) = convert_currency_dynamic(val, &from_unit, &to_unit) {
-        let formatted = format_result(res_val);
+        let formatted = format_currency(res_val, &res_label);
+        let val_formatted = format_currency(val, &from_label);
         let title = format!("{} {}", formatted, res_label.to_uppercase());
-        let subtitle = format!("{} {} = {} (Press Enter to copy)", format_result(val), from_label.to_uppercase(), title);
+        let subtitle = format!("{} {} = {} (Press Enter to copy)", val_formatted, from_label.to_uppercase(), title);
         return Some(ConversionResult {
             title,
             subtitle,
@@ -827,6 +881,10 @@ mod tests {
         assert_eq!(format_result(1024.0), "1,024");
         assert_eq!(format_result(1000000.0), "1,000,000");
         assert_eq!(format_result(3.14159), "3.14159");
+        assert_eq!(format_result(1234567.89), "1,234,567.89");
+        assert_eq!(format_currency(26062.2142, "VND"), "26,062");
+        assert_eq!(format_currency(98.2345, "USD"), "98.23");
+        assert_eq!(format_currency(1250000.0, "VND"), "1,250,000");
     }
 
     #[test]
