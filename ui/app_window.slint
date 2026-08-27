@@ -95,6 +95,7 @@ export component AppWindow inherits Window {
     callback start_window_drag();
     callback tab_pressed();
     callback handle_backspace() -> bool;
+    callback request_system_theme();
 
     public function focus_search() {
         search_input.focus();
@@ -887,6 +888,7 @@ export component AppWindow inherits Window {
                                                 TouchArea {
                                                     clicked => {
                                                         root.cfg_theme_mode = "system";
+                                                        root.request_system_theme();
                                                     }
                                                 }
                                                 Text {

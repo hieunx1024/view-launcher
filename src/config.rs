@@ -68,8 +68,43 @@ pub fn is_system_dark_mode() -> bool {
         }
         true
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
+        if let Ok(output) = std::process::Command::new("defaults")
+            .args(&["read", "-g", "AppleInterfaceStyle"])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            return text.contains("dark");
+        }
+        false
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        // 1. Check Freedesktop Portal Settings (Standard for GNOME 42+, KDE Plasma 5.24+, Sway, Hyprland, etc.)
+        if let Ok(output) = std::process::Command::new("dbus-send")
+            .args(&[
+                "--session",
+                "--dest=org.freedesktop.portal.Desktop",
+                "--type=method_call",
+                "--print-reply=literal",
+                "/org/freedesktop/portal/desktop",
+                "org.freedesktop.portal.Settings.Read",
+                "string:org.freedesktop.appearance",
+                "string:color-scheme",
+            ])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if text.contains("uint32 1") {
+                return true;
+            } else if text.contains("uint32 2") || text.contains("uint32 0") {
+                // uint32 1 = prefer dark, uint32 2 = prefer light, uint32 0 = no preference (light)
+                return false;
+            }
+        }
+
+        // 2. Check GNOME gsettings color-scheme
         if let Ok(output) = std::process::Command::new("gsettings")
             .args(&["get", "org.gnome.desktop.interface", "color-scheme"])
             .output()
@@ -77,10 +112,12 @@ pub fn is_system_dark_mode() -> bool {
             let text = String::from_utf8_lossy(&output.stdout).to_lowercase();
             if text.contains("prefer-dark") || text.contains("dark") {
                 return true;
-            } else if text.contains("prefer-light") {
+            } else if text.contains("prefer-light") || text.contains("default") {
                 return false;
             }
         }
+
+        // 3. Check GNOME gsettings gtk-theme
         if let Ok(theme_out) = std::process::Command::new("gsettings")
             .args(&["get", "org.gnome.desktop.interface", "gtk-theme"])
             .output()
@@ -88,8 +125,24 @@ pub fn is_system_dark_mode() -> bool {
             let theme_text = String::from_utf8_lossy(&theme_out.stdout).to_lowercase();
             if theme_text.contains("dark") {
                 return true;
+            } else if !theme_text.is_empty() && theme_out.status.success() {
+                return false;
             }
         }
+
+        // 4. Check KDE Plasma kreadconfig
+        if let Ok(kde_out) = std::process::Command::new("kreadconfig5")
+            .args(&["--group", "General", "--key", "ColorScheme"])
+            .output()
+        {
+            let kde_text = String::from_utf8_lossy(&kde_out.stdout).to_lowercase();
+            if kde_text.contains("dark") {
+                return true;
+            } else if !kde_text.is_empty() && kde_out.status.success() {
+                return false;
+            }
+        }
+
         true
     }
 }

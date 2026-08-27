@@ -85,6 +85,10 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
                                     exit_flag.store(true, Ordering::SeqCst);
                                     let _ = ui.hide();
                                 } else {
+                                    let cfg = Config::load();
+                                    if cfg.theme.mode == "system" {
+                                        ui.set_is_dark(cfg.theme.is_dark());
+                                    }
                                     ui.set_search_text("".into());
                                     ui.set_is_expanded(false);
                                     let _ = ui.show();
@@ -128,6 +132,10 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
                                     exit_flag.store(true, Ordering::SeqCst);
                                     let _ = ui.hide();
                                 } else {
+                                    let cfg = Config::load();
+                                    if cfg.theme.mode == "system" {
+                                        ui.set_is_dark(cfg.theme.is_dark());
+                                    }
                                     ui.set_search_text("".into());
                                     ui.set_is_expanded(false);
                                     let _ = ui.show();
@@ -979,6 +987,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         open_config_file();
     });
 
+    // 9.4 Connect Immediate System Theme Request
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_request_system_theme(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let is_dark = view_launcher::config::is_system_dark_mode();
+                ui.set_is_dark(is_dark);
+            }
+        });
+    }
+
     // 10. Connect Close Window (Esc)
     {
         let ui_weak = ui.as_weak();
@@ -999,6 +1018,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ui.window().with_winit_window(|winit_window| {
                     let _ = winit_window.drag_window();
                 });
+            }
+        });
+    }
+
+    // 10.2 Real-time System Theme Watcher Thread (non-blocking)
+    {
+        let ui_weak = ui.as_weak();
+        std::thread::spawn(move || {
+            let mut last_dark: Option<bool> = None;
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(600));
+                if let Some(ui) = ui_weak.upgrade() {
+                    let mode = ui.get_cfg_theme_mode().to_string();
+                    if mode == "system" {
+                        let current_dark = view_launcher::config::is_system_dark_mode();
+                        if last_dark != Some(current_dark) {
+                            last_dark = Some(current_dark);
+                            let ui_w = ui_weak.clone();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(ui) = ui_w.upgrade() {
+                                    if ui.get_cfg_theme_mode() == "system" {
+                                        ui.set_is_dark(current_dark);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                } else {
+                    break;
+                }
             }
         });
     }
