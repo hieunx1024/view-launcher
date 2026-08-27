@@ -29,6 +29,7 @@ pub enum ItemType {
     Window,
     Clipboard,
     Dmenu,
+    Theme,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,7 @@ impl LauncherItem {
     }
     pub fn get_category_tag(&self) -> &'static str {
         match self.item_type {
+            ItemType::Theme => "Theme",
             ItemType::Calc => "Calc",
             ItemType::Dir => "Folder",
             ItemType::File => "File",
@@ -982,6 +984,17 @@ impl LauncherEngine {
                     ),
                     Vec::new(),
                 ));
+                results.push((
+                    LauncherItem::new(
+                        "@theme - Switch Theme & Opacity".to_string(),
+                        "@theme".to_string(),
+                        ItemType::Calc,
+                        Some("Dark, Light, System, or Opacity (e.g. @theme 95%)".to_string()),
+                        false,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
                 for p in plugins {
                     results.push((
                         LauncherItem::new(
@@ -999,7 +1012,119 @@ impl LauncherEngine {
             }
         }
 
-        // 7. Chuyển đổi thông minh Offline (Unit & Currency Converter)
+        // 7. Chế độ chuyển đổi Theme & Opacity (@theme, @mode, @opacity)
+        let is_theme_mode = trimmed_query.starts_with("@theme")
+            || trimmed_query.starts_with("@mode")
+            || trimmed_query.starts_with("@opacity");
+
+        if is_theme_mode {
+            let theme_query = if trimmed_query.starts_with("@theme ") {
+                trimmed_query[7..].trim()
+            } else if trimmed_query.starts_with("@mode ") {
+                trimmed_query[6..].trim()
+            } else if trimmed_query.starts_with("@opacity ") {
+                trimmed_query[9..].trim()
+            } else if trimmed_query == "@theme" || trimmed_query == "@mode" || trimmed_query == "@opacity" {
+                ""
+            } else {
+                trimmed_query
+            };
+
+            let theme_items = vec![
+                LauncherItem::new(
+                    "🌙 Dark Theme".to_string(),
+                    "theme:dark".to_string(),
+                    ItemType::Theme,
+                    Some("Switch to sleek dark palette with high contrast".to_string()),
+                    false,
+                    None,
+                ),
+                LauncherItem::new(
+                    "☀️ Light Theme".to_string(),
+                    "theme:light".to_string(),
+                    ItemType::Theme,
+                    Some("Switch to clean, high-visibility light palette".to_string()),
+                    false,
+                    None,
+                ),
+                LauncherItem::new(
+                    "🖥️ Auto (Follow System Theme)".to_string(),
+                    "theme:system".to_string(),
+                    ItemType::Theme,
+                    Some("Automatically match OS dark/light mode".to_string()),
+                    false,
+                    None,
+                ),
+                LauncherItem::new(
+                    "🎚️ Opacity: 100% (Solid)".to_string(),
+                    "theme:opacity:100".to_string(),
+                    ItemType::Theme,
+                    Some("Set window opacity to 100% (opaque)".to_string()),
+                    false,
+                    None,
+                ),
+                LauncherItem::new(
+                    "🎚️ Opacity: 95% (Frosted Glass - Recommended)".to_string(),
+                    "theme:opacity:95".to_string(),
+                    ItemType::Theme,
+                    Some("Set window opacity to 95% (modern glassmorphism)".to_string()),
+                    false,
+                    None,
+                ),
+                LauncherItem::new(
+                    "🎚️ Opacity: 90% (Glass)".to_string(),
+                    "theme:opacity:90".to_string(),
+                    ItemType::Theme,
+                    Some("Set window opacity to 90%".to_string()),
+                    false,
+                    None,
+                ),
+                LauncherItem::new(
+                    "🎚️ Opacity: 80% (Translucent)".to_string(),
+                    "theme:opacity:80".to_string(),
+                    ItemType::Theme,
+                    Some("Set window opacity to 80%".to_string()),
+                    false,
+                    None,
+                ),
+                LauncherItem::new(
+                    "🎚️ Opacity: 70% (High Transparency)".to_string(),
+                    "theme:opacity:70".to_string(),
+                    ItemType::Theme,
+                    Some("Set window opacity to 70%".to_string()),
+                    false,
+                    None,
+                ),
+            ];
+
+            if theme_query.is_empty() {
+                for item in theme_items {
+                    results.push((item, Vec::new()));
+                }
+                return results;
+            }
+
+            let norm_q = remove_vietnamese_accents(theme_query);
+            let mut matches: Vec<((LauncherItem, Vec<usize>), i64)> = theme_items
+                .into_iter()
+                .filter_map(|item| {
+                    let (score, indices) = self.match_precomputed(
+                        &item.name,
+                        &item.normalized_name,
+                        theme_query,
+                        &norm_q,
+                    )?;
+                    Some(((item, indices), score + 300))
+                })
+                .collect();
+            matches.sort_by(|a, b| b.1.cmp(&a.1));
+            for (item_with_indices, _) in matches {
+                results.push(item_with_indices);
+            }
+            return results;
+        }
+
+        // 8. Chuyển đổi thông minh Offline (Unit & Currency Converter)
         if let Some(conv) = calc::evaluate_conversion(trimmed_query) {
             results.push((
                 LauncherItem::new(
@@ -1284,7 +1409,7 @@ impl LauncherEngine {
                             .ok();
                     }
                 }
-                ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu => {}
+                ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu | ItemType::Theme => {}
             }
         }
 
@@ -1309,7 +1434,7 @@ impl LauncherEngine {
         let dir = match item.item_type {
             ItemType::Dir => PathBuf::from(&item.exec_or_path),
             ItemType::File => Path::new(&item.exec_or_path).parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from(".")),
-            ItemType::App | ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu => return,
+            ItemType::App | ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu | ItemType::Theme => return,
         };
 
         #[cfg(not(target_os = "windows"))]
@@ -1664,6 +1789,41 @@ mod tests {
         assert!(results.len() >= 2);
         // Image Viewer must rank at #0 above Extension Manager
         assert_eq!(results[0].0.name, "Image Viewer");
+    }
+
+    #[test]
+    fn test_theme_mode_search() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+
+        let results = engine.search("@theme");
+        assert!(!results.is_empty());
+        assert!(results.iter().any(|(item, _)| item.exec_or_path == "theme:dark"));
+        assert!(results.iter().any(|(item, _)| item.exec_or_path == "theme:light"));
+        assert!(results.iter().any(|(item, _)| item.exec_or_path == "theme:system"));
+        assert!(results.iter().any(|(item, _)| item.exec_or_path == "theme:opacity:95"));
+
+        let dark_match = engine.search("@theme dark");
+        assert!(!dark_match.is_empty());
+        assert_eq!(dark_match[0].0.exec_or_path, "theme:dark");
+
+        let opacity_match = engine.search("@opacity 80");
+        assert!(!opacity_match.is_empty());
+        assert_eq!(opacity_match[0].0.exec_or_path, "theme:opacity:80");
+    }
+
+    #[test]
+    fn test_theme_config_and_is_dark() {
+        let mut theme = crate::config::ThemeConfig::default();
+        assert_eq!(theme.mode, "dark");
+        assert_eq!(theme.opacity, 0.95);
+        assert!(theme.is_dark());
+
+        theme.mode = "light".to_string();
+        assert!(!theme.is_dark());
+
+        theme.mode = "dark".to_string();
+        assert!(theme.is_dark());
     }
 }
 

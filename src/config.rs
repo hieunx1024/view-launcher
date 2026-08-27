@@ -10,6 +10,10 @@ pub struct GeneralConfig {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ThemeConfig {
+    #[serde(default = "default_theme_mode")]
+    pub mode: String,
+    #[serde(default = "default_opacity")]
+    pub opacity: f32,
     #[serde(default = "default_query_color")]
     pub query_color: String,
     #[serde(default = "default_selection_bg")]
@@ -28,6 +32,8 @@ pub struct ThemeConfig {
     pub compact_empty_view: Option<bool>,
 }
 
+fn default_theme_mode() -> String { "dark".to_string() }
+fn default_opacity() -> f32 { 0.95 }
 fn default_query_color() -> String { "#7aa2f7".to_string() }
 fn default_selection_bg() -> String { "#283457".to_string() }
 fn default_selection_fg() -> String { "#ffffff".to_string() }
@@ -35,9 +41,64 @@ fn default_border_color() -> String { "#3b4261".to_string() }
 fn default_highlight_color() -> String { "#ff9e64".to_string() }
 fn default_true() -> Option<bool> { Some(true) }
 
+impl ThemeConfig {
+    pub fn is_dark(&self) -> bool {
+        match self.mode.to_lowercase().as_str() {
+            "light" => false,
+            "system" => is_system_dark_mode(),
+            _ => true,
+        }
+    }
+}
+
+pub fn is_system_dark_mode() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        if let Ok(output) = Command::new("reg")
+            .args(&["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "/v", "AppsUseLightTheme"])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if text.contains("0x0") {
+                return true;
+            } else if text.contains("0x1") {
+                return false;
+            }
+        }
+        true
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(output) = std::process::Command::new("gsettings")
+            .args(&["get", "org.gnome.desktop.interface", "color-scheme"])
+            .output()
+        {
+            let text = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            if text.contains("prefer-dark") || text.contains("dark") {
+                return true;
+            } else if text.contains("prefer-light") {
+                return false;
+            }
+        }
+        if let Ok(theme_out) = std::process::Command::new("gsettings")
+            .args(&["get", "org.gnome.desktop.interface", "gtk-theme"])
+            .output()
+        {
+            let theme_text = String::from_utf8_lossy(&theme_out.stdout).to_lowercase();
+            if theme_text.contains("dark") {
+                return true;
+            }
+        }
+        true
+    }
+}
+
 impl Default for ThemeConfig {
     fn default() -> Self {
         Self {
+            mode: default_theme_mode(),
+            opacity: default_opacity(),
             query_color: default_query_color(),
             selection_bg: default_selection_bg(),
             selection_fg: default_selection_fg(),

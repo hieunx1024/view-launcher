@@ -52,7 +52,34 @@ export component AppWindow inherits Window {
     in-out property <bool> cfg_enable_path_matching: true;
     in-out property <int> cfg_max_results: 7;
     in-out property <int> cfg_max_depth: 2;
+    in-out property <string> cfg_theme_mode: "dark";
+    in-out property <float> cfg_theme_opacity: 0.95;
+    in-out property <bool> is_dark: true;
     in-out property <string> settings_status: "";
+
+    // Dynamic Theme Color Tokens
+    property <color> col_card_bg: root.is_dark ? rgba(30, 30, 32, root.cfg_theme_opacity) : rgba(255, 255, 255, root.cfg_theme_opacity);
+    property <color> col_border: search_input.has-focus ? (root.is_dark ? #0a84ff80 : #0969da80) : (root.is_dark ? #38383a : #d0d7de);
+    property <color> col_text_primary: root.is_dark ? #ffffff : #1f2328;
+    property <color> col_text_muted: root.is_dark ? #8e8e93 : #656d76;
+    property <color> col_text_placeholder: root.is_dark ? #636366 : #8c959f;
+    property <color> col_input_text: root.is_dark ? #ffffff : #1f2328;
+    property <color> col_selection_bg: root.is_dark ? #007aff : #0969da;
+    property <color> col_item_hover: root.is_dark ? #2c2c2e80 : #f0f3f6;
+    property <color> col_item_selected_bg: root.is_dark ? #007aff : #0969da;
+    property <color> col_badge_bg: root.is_dark ? #2c2c2e : #e6e8ec;
+    property <color> col_badge_text: root.is_dark ? #0a84ff : #0969da;
+    property <color> col_separator: root.is_dark ? #333336 : #e1e4e8;
+    property <color> col_kbd_bg: root.is_dark ? #2c2c2e : #f0f3f6;
+    property <color> col_kbd_border: root.is_dark ? #3a3a3c : #d0d7de;
+    property <color> col_kbd_text: root.is_dark ? #8e8e93 : #656d76;
+    property <color> col_kbd_accent: root.is_dark ? #0a84ff : #0969da;
+    property <color> col_settings_card_bg: root.is_dark ? #2c2c2e : #f6f8fa;
+    property <color> col_settings_card_border: root.is_dark ? #38383a : #d0d7de;
+    property <color> col_settings_card_text: root.is_dark ? #f5f5f7 : #1f2328;
+    property <color> col_btn_secondary_bg: root.is_dark ? #2c2c2e : #eaeef2;
+    property <color> col_btn_secondary_hover: root.is_dark ? #3a3a3c : #d0d7de;
+    property <color> col_btn_secondary_text: root.is_dark ? #ebebf5 : #24292f;
 
     callback search_text_changed(string);
     callback move_up();
@@ -62,7 +89,7 @@ export component AppWindow inherits Window {
     callback copy_path(int);
     callback open_config();
     callback close_settings();
-    callback save_settings(bool, bool, bool, int, int, bool, bool);
+    callback save_settings(bool, bool, bool, int, int, bool, bool, string, float);
     callback open_raw_config();
     callback close_window();
     callback start_window_drag();
@@ -85,17 +112,17 @@ export component AppWindow inherits Window {
         search_input.focus();
     }
 
-    // Main Floating Glassmorphic Container (macOS Spotlight Dark Aesthetic)
+    // Main Floating Glassmorphic Container (macOS Spotlight Aesthetic)
     main_card := Rectangle {
         x: 0px;
         y: 0px;
         width: 100%;
         height: root.is_showing_list ? 520px : 56px;
         animate height { duration: 140ms; easing: ease-out; }
-        background: #1e1e20;
+        background: root.col_card_bg;
         border-radius: 14px;
         border-width: 1px;
-        border-color: search_input.has-focus ? #0a84ff80 : #38383a;
+        border-color: root.col_border;
         animate border-color { duration: 150ms; easing: ease-out; }
         clip: true;
 
@@ -156,7 +183,7 @@ export component AppWindow inherits Window {
                             width: 100%;
                             height: 100%;
                             text: root.is_file_mode ? "Search files & folders..." : "Search apps, files, or math...";
-                            color: #636366;
+                            color: root.col_text_placeholder;
                             font-size: 16px;
                             vertical-alignment: center;
                             horizontal-alignment: left;
@@ -170,8 +197,8 @@ export component AppWindow inherits Window {
                             text <=> root.search_text;
                             single-line: true;
                             font-size: 16px;
-                            color: #ffffff;
-                            selection-background-color: #007aff;
+                            color: root.col_input_text;
+                            selection-background-color: root.col_selection_bg;
                             selection-foreground-color: #ffffff;
                             vertical-alignment: center;
                             horizontal-alignment: left;
@@ -268,7 +295,7 @@ export component AppWindow inherits Window {
                             settings_btn := Rectangle {
                                 width: 24px;
                                 height: 24px;
-                                background: settings_touch.has-hover ? #48484a : #3a3a3c80;
+                                background: settings_touch.has-hover ? root.col_btn_secondary_hover : root.col_btn_secondary_bg;
                                 border-radius: 6px;
                                 animate background { duration: 100ms; }
 
@@ -304,7 +331,7 @@ export component AppWindow inherits Window {
 
                                 Text {
                                     text: "✕";
-                                    color: close_touch.has-hover ? #ff453a : #8e8e93;
+                                    color: close_touch.has-hover ? #ff453a : root.col_text_muted;
                                     font-size: 11px;
                                     font-weight: 700;
                                     horizontal-alignment: center;
@@ -320,7 +347,7 @@ export component AppWindow inherits Window {
             Rectangle {
                 visible: root.is_showing_list;
                 height: 1px;
-                background: #333336;
+                background: root.col_separator;
             }
 
             // 2. SCROLLABLE RESULTS LIST (macOS Spotlight Item Selection Style)
@@ -350,13 +377,13 @@ export component AppWindow inherits Window {
                             text: root.empty_state_title;
                             font-size: 14px;
                             font-weight: 600;
-                            color: #ebebf5;
+                            color: root.col_text_primary;
                             horizontal-alignment: center;
                         }
                         Text {
                             text: root.empty_state_subtitle;
                             font-size: 12px;
-                            color: #8e8e93;
+                            color: root.col_text_muted;
                             horizontal-alignment: center;
                         }
                     }
@@ -374,7 +401,7 @@ export component AppWindow inherits Window {
 
                         for item[index] in root.items : item_row := Rectangle {
                             height: 46px;
-                            background: (index == root.selected_index) ? #007aff : (item_touch.has-hover ? #2c2c2e80 : transparent);
+                            background: (index == root.selected_index) ? root.col_item_selected_bg : (item_touch.has-hover ? root.col_item_hover : transparent);
                             border-radius: 8px;
                             animate background { duration: 80ms; }
 
@@ -415,13 +442,13 @@ export component AppWindow inherits Window {
                                             width: 28px;
                                             height: 28px;
                                             border-radius: 6px;
-                                            background: (index == root.selected_index) ? #ffffff26 : #2c2c2e;
+                                            background: (index == root.selected_index) ? #ffffff26 : root.col_badge_bg;
 
                                             Text {
                                                 width: 100%;
                                                 height: 100%;
-                                                text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "📁" : ((item.item_type == "clip") ? "📋" : ((item.item_type == "win") ? "🗔" : ((item.item_type == "sys") ? "⚡" : "◆"))));
-                                                color: (index == root.selected_index) ? #ffffff : #0a84ff;
+                                                text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "📁" : ((item.item_type == "clip") ? "📋" : ((item.item_type == "win") ? "🗔" : ((item.item_type == "sys") ? "⚡" : ((item.item_type == "theme") ? "🎨" : "◆")))));
+                                                color: (index == root.selected_index) ? #ffffff : root.col_badge_text;
                                                 font-size: 15px;
                                                 font-weight: 700;
                                                 horizontal-alignment: center;
@@ -434,7 +461,7 @@ export component AppWindow inherits Window {
                                 // Item Name Title (Razor-sharp high contrast text)
                                 Text {
                                     text: item.name;
-                                    color: #ffffff;
+                                    color: (index == root.selected_index) ? #ffffff : root.col_text_primary;
                                     font-weight: (index == root.selected_index) ? 600 : 500;
                                     font-size: 15px;
                                     horizontal-stretch: 1;
@@ -447,7 +474,7 @@ export component AppWindow inherits Window {
                                     alignment: end;
                                     Text {
                                         text: item.category;
-                                        color: (index == root.selected_index) ? #ffffffcc : #9ca3af;
+                                        color: (index == root.selected_index) ? #ffffffcc : root.col_text_muted;
                                         font-size: 12px;
                                         font-weight: 500;
                                         vertical-alignment: center;
@@ -479,12 +506,12 @@ export component AppWindow inherits Window {
                             alignment: center;
 
                             Rectangle {
-                                background: #2c2c2e;
+                                background: root.col_kbd_bg;
                                 border-radius: 4px;
                                 height: 18px;
                                 width: 22px;
                                 border-width: 1px;
-                                border-color: #3a3a3c;
+                                border-color: root.col_kbd_border;
                                 HorizontalLayout {
                                     alignment: center;
                                     Image {
@@ -498,8 +525,8 @@ export component AppWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: (footer.sel_type == "calc" || footer.sel_type == "clip") ? "Copy" : ((footer.sel_type == "win") ? "Switch" : ((footer.sel_type == "sys") ? "Execute" : "Open"));
-                                color: #8e8e93;
+                                text: (footer.sel_type == "calc" || footer.sel_type == "clip") ? "Copy" : ((footer.sel_type == "win") ? "Switch" : ((footer.sel_type == "sys" || footer.sel_type == "theme") ? "Apply" : "Open"));
+                                color: root.col_kbd_text;
                                 font-size: 11px;
                                 font-weight: 500;
                                 vertical-alignment: center;
@@ -512,19 +539,19 @@ export component AppWindow inherits Window {
                             alignment: center;
 
                             Rectangle {
-                                background: #2c2c2e;
+                                background: root.col_kbd_bg;
                                 border-radius: 4px;
                                 height: 18px;
                                 border-width: 1px;
-                                border-color: #3a3a3c;
+                                border-color: root.col_kbd_border;
                                 HorizontalLayout {
                                     padding-left: 5px;
                                     padding-right: 5px;
                                     alignment: center;
-                                    Text { text: "Tab"; color: #0a84ff; font-weight: 700; font-size: 10px; vertical-alignment: center; }
+                                    Text { text: "Tab"; color: root.col_kbd_accent; font-weight: 700; font-size: 10px; vertical-alignment: center; }
                                 }
                             }
-                            Text { text: "Browse"; color: #8e8e93; font-size: 11px; font-weight: 500; vertical-alignment: center; }
+                            Text { text: "Browse"; color: root.col_kbd_text; font-size: 11px; font-weight: 500; vertical-alignment: center; }
                         }
 
                         // Copy Path (Alt+C)
@@ -533,19 +560,19 @@ export component AppWindow inherits Window {
                             alignment: center;
 
                             Rectangle {
-                                background: #2c2c2e;
+                                background: root.col_kbd_bg;
                                 border-radius: 4px;
                                 height: 18px;
                                 border-width: 1px;
-                                border-color: #3a3a3c;
+                                border-color: root.col_kbd_border;
                                 HorizontalLayout {
                                     padding-left: 5px;
                                     padding-right: 5px;
                                     alignment: center;
-                                    Text { text: "Alt+C"; color: #8e8e93; font-weight: 700; font-size: 10px; vertical-alignment: center; }
+                                    Text { text: "Alt+C"; color: root.col_kbd_text; font-weight: 700; font-size: 10px; vertical-alignment: center; }
                                 }
                             }
-                            Text { text: "Copy Path"; color: #8e8e93; font-size: 11px; font-weight: 500; vertical-alignment: center; }
+                            Text { text: "Copy Path"; color: root.col_kbd_text; font-size: 11px; font-weight: 500; vertical-alignment: center; }
                         }
 
                         // Terminal (Alt+T)
@@ -554,19 +581,19 @@ export component AppWindow inherits Window {
                             alignment: center;
 
                             Rectangle {
-                                background: #2c2c2e;
+                                background: root.col_kbd_bg;
                                 border-radius: 4px;
                                 height: 18px;
                                 border-width: 1px;
-                                border-color: #3a3a3c;
+                                border-color: root.col_kbd_border;
                                 HorizontalLayout {
                                     padding-left: 5px;
                                     padding-right: 5px;
                                     alignment: center;
-                                    Text { text: "Alt+T"; color: #8e8e93; font-weight: 700; font-size: 10px; vertical-alignment: center; }
+                                    Text { text: "Alt+T"; color: root.col_kbd_text; font-weight: 700; font-size: 10px; vertical-alignment: center; }
                                 }
                             }
-                            Text { text: "Terminal"; color: #8e8e93; font-size: 11px; font-weight: 500; vertical-alignment: center; }
+                            Text { text: "Terminal"; color: root.col_kbd_text; font-size: 11px; font-weight: 500; vertical-alignment: center; }
                         }
 
                         // Ctrl+, Settings
@@ -575,19 +602,19 @@ export component AppWindow inherits Window {
                             alignment: center;
 
                             Rectangle {
-                                background: #2c2c2e;
+                                background: root.col_kbd_bg;
                                 border-radius: 4px;
                                 height: 18px;
                                 border-width: 1px;
-                                border-color: #3a3a3c;
+                                border-color: root.col_kbd_border;
                                 HorizontalLayout {
                                     padding-left: 5px;
                                     padding-right: 5px;
                                     alignment: center;
-                                    Text { text: "Ctrl+,"; color: #0a84ff; font-weight: 700; font-size: 10px; vertical-alignment: center; }
+                                    Text { text: "Ctrl+,"; color: root.col_kbd_accent; font-weight: 700; font-size: 10px; vertical-alignment: center; }
                                 }
                             }
-                            Text { text: "Settings"; color: #8e8e93; font-size: 11px; font-weight: 500; vertical-alignment: center; }
+                            Text { text: "Settings"; color: root.col_kbd_text; font-size: 11px; font-weight: 500; vertical-alignment: center; }
                         }
                     }
 
@@ -596,7 +623,7 @@ export component AppWindow inherits Window {
                         alignment: end;
                         Text {
                             text: root.status_item_count;
-                            color: #86868b;
+                            color: root.col_text_muted;
                             font-size: 11px;
                             font-weight: 500;
                             vertical-alignment: center;
@@ -667,7 +694,7 @@ export component AppWindow inherits Window {
                                 }
                                 Text {
                                     text: "Spotlight Preferences";
-                                    color: #ffffff;
+                                    color: root.col_text_primary;
                                     font-size: 14px;
                                     font-weight: 700;
                                     vertical-alignment: center;
@@ -677,10 +704,10 @@ export component AppWindow inherits Window {
                             // Back Button [Esc]
                             back_btn := Rectangle {
                                 height: 26px;
-                                background: back_touch.has-hover ? #3a3a3c : #2c2c2e;
+                                background: back_touch.has-hover ? root.col_btn_secondary_hover : root.col_btn_secondary_bg;
                                 border-radius: 6px;
                                 border-width: 1px;
-                                border-color: #38383a;
+                                border-color: root.col_settings_card_border;
 
                                 back_touch := TouchArea {
                                     clicked => {
@@ -694,7 +721,7 @@ export component AppWindow inherits Window {
                                     alignment: center;
                                     Text {
                                         text: "← Back [Esc]";
-                                        color: #ebebf5;
+                                        color: root.col_btn_secondary_text;
                                         font-size: 11px;
                                         font-weight: 600;
                                         vertical-alignment: center;
@@ -704,7 +731,7 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    Rectangle { height: 1px; background: #333336; }
+                    Rectangle { height: 1px; background: root.col_separator; }
 
                     // 1. Settings Content Area
                     VerticalLayout {
@@ -714,25 +741,25 @@ export component AppWindow inherits Window {
                         // Group 0: System & Startup
                         Text {
                             text: "SYSTEM & STARTUP";
-                            color: #0a84ff;
+                            color: root.col_kbd_accent;
                             font-size: 11px;
                             font-weight: 700;
                         }
 
                         // Setting: Autostart with System
                         Rectangle {
-                            height: 38px;
-                            background: #2c2c2e;
+                            height: 36px;
+                            background: root.col_settings_card_bg;
                             border-radius: 8px;
                             border-width: 1px;
-                            border-color: #38383a;
+                            border-color: root.col_settings_card_border;
                             HorizontalLayout {
                                 padding-left: 14px;
                                 padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Start Automatically on System Boot";
-                                    color: #f5f5f7;
+                                    color: root.col_settings_card_text;
                                     font-size: 13px;
                                     font-weight: 500;
                                     vertical-alignment: center;
@@ -741,8 +768,8 @@ export component AppWindow inherits Window {
                                     alignment: end;
                                     toggle_autostart := Rectangle {
                                         width: 54px;
-                                        height: 26px;
-                                        border-radius: 13px;
+                                        height: 24px;
+                                        border-radius: 12px;
                                         background: root.cfg_autostart ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -765,28 +792,233 @@ export component AppWindow inherits Window {
                             }
                         }
 
-                        // Group 1: Appearance
+                        // Group 1: Appearance & Theme
                         Text {
-                            text: "APPEARANCE & VISUALS";
-                            color: #0a84ff;
+                            text: "APPEARANCE & THEME";
+                            color: root.col_kbd_accent;
                             font-size: 11px;
                             font-weight: 700;
                         }
 
-                        // Setting: Show App Icons
+                        // Setting: Theme Mode (Dark / Light / System)
                         Rectangle {
-                            height: 38px;
-                            background: #2c2c2e;
+                            height: 36px;
+                            background: root.col_settings_card_bg;
                             border-radius: 8px;
                             border-width: 1px;
-                            border-color: #38383a;
+                            border-color: root.col_settings_card_border;
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                alignment: space-between;
+                                Text {
+                                    text: "Theme Palette";
+                                    color: root.col_settings_card_text;
+                                    font-size: 13px;
+                                    font-weight: 500;
+                                    vertical-alignment: center;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    alignment: end;
+
+                                    // Dark Button
+                                    Rectangle {
+                                        width: 66px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_mode == "dark") ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_mode == "dark") ? #007aff : root.col_settings_card_border;
+                                        TouchArea {
+                                            clicked => {
+                                                root.cfg_theme_mode = "dark";
+                                                root.is_dark = true;
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: "🌙 Dark";
+                                                color: (root.cfg_theme_mode == "dark") ? #ffffff : root.col_text_muted;
+                                                font-size: 11px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
+                                    }
+
+                                    // Light Button
+                                    Rectangle {
+                                        width: 66px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_mode == "light") ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_mode == "light") ? #007aff : root.col_settings_card_border;
+                                        TouchArea {
+                                            clicked => {
+                                                root.cfg_theme_mode = "light";
+                                                root.is_dark = false;
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: "☀️ Light";
+                                                color: (root.cfg_theme_mode == "light") ? #ffffff : root.col_text_muted;
+                                                font-size: 11px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
+                                    }
+
+                                    // System Button
+                                    Rectangle {
+                                        width: 66px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_mode == "system") ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_mode == "system") ? #007aff : root.col_settings_card_border;
+                                        TouchArea {
+                                            clicked => {
+                                                root.cfg_theme_mode = "system";
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: "🖥️ Auto";
+                                                color: (root.cfg_theme_mode == "system") ? #ffffff : root.col_text_muted;
+                                                font-size: 11px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Setting: Window Opacity Selector
+                        Rectangle {
+                            height: 36px;
+                            background: root.col_settings_card_bg;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: root.col_settings_card_border;
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                alignment: space-between;
+                                Text {
+                                    text: "Window Opacity (Glassmorphism)";
+                                    color: root.col_settings_card_text;
+                                    font-size: 13px;
+                                    font-weight: 500;
+                                    vertical-alignment: center;
+                                }
+                                HorizontalLayout {
+                                    spacing: 5px;
+                                    alignment: end;
+
+                                    // 100%
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_opacity >= 0.98) ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_opacity >= 0.98) ? #007aff : root.col_settings_card_border;
+                                        TouchArea { clicked => { root.cfg_theme_opacity = 1.0; } }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text { text: "100%"; color: (root.cfg_theme_opacity >= 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                    }
+
+                                    // 95%
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #007aff : root.col_settings_card_border;
+                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.95; } }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text { text: "95%"; color: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                    }
+
+                                    // 90%
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #007aff : root.col_settings_card_border;
+                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.90; } }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text { text: "90%"; color: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                    }
+
+                                    // 80%
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #007aff : root.col_settings_card_border;
+                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.80; } }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text { text: "80%"; color: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                    }
+
+                                    // 70%
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 24px;
+                                        border-radius: 6px;
+                                        background: (root.cfg_theme_opacity < 0.76) ? #007aff : root.col_kbd_bg;
+                                        border-width: 1px;
+                                        border-color: (root.cfg_theme_opacity < 0.76) ? #007aff : root.col_settings_card_border;
+                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.70; } }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Text { text: "70%"; color: (root.cfg_theme_opacity < 0.76) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Setting: Show App Icons
+                        Rectangle {
+                            height: 36px;
+                            background: root.col_settings_card_bg;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: root.col_settings_card_border;
                             HorizontalLayout {
                                 padding-left: 14px;
                                 padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Show Native Application Icons";
-                                    color: #f5f5f7;
+                                    color: root.col_settings_card_text;
                                     font-size: 13px;
                                     font-weight: 500;
                                     vertical-alignment: center;
@@ -795,8 +1027,8 @@ export component AppWindow inherits Window {
                                     alignment: end;
                                     toggle_icon := Rectangle {
                                         width: 54px;
-                                        height: 26px;
-                                        border-radius: 13px;
+                                        height: 24px;
+                                        border-radius: 12px;
                                         background: root.cfg_show_icons ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -821,18 +1053,18 @@ export component AppWindow inherits Window {
 
                         // Setting: Compact Start View
                         Rectangle {
-                            height: 38px;
-                            background: #2c2c2e;
+                            height: 36px;
+                            background: root.col_settings_card_bg;
                             border-radius: 8px;
                             border-width: 1px;
-                            border-color: #38383a;
+                            border-color: root.col_settings_card_border;
                             HorizontalLayout {
                                 padding-left: 14px;
                                 padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Compact Start View (Spotlight bar)";
-                                    color: #f5f5f7;
+                                    color: root.col_settings_card_text;
                                     font-size: 13px;
                                     font-weight: 500;
                                     vertical-alignment: center;
@@ -841,8 +1073,8 @@ export component AppWindow inherits Window {
                                     alignment: end;
                                     toggle_compact := Rectangle {
                                         width: 54px;
-                                        height: 26px;
-                                        border-radius: 13px;
+                                        height: 24px;
+                                        border-radius: 12px;
                                         background: root.cfg_compact_empty ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -867,18 +1099,18 @@ export component AppWindow inherits Window {
 
                         // Setting: Show Status Bar
                         Rectangle {
-                            height: 38px;
-                            background: #2c2c2e;
+                            height: 36px;
+                            background: root.col_settings_card_bg;
                             border-radius: 8px;
                             border-width: 1px;
-                            border-color: #38383a;
+                            border-color: root.col_settings_card_border;
                             HorizontalLayout {
                                 padding-left: 14px;
                                 padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Show Bottom Keyboard Shortcuts Bar";
-                                    color: #f5f5f7;
+                                    color: root.col_settings_card_text;
                                     font-size: 13px;
                                     font-weight: 500;
                                     vertical-alignment: center;
@@ -887,8 +1119,8 @@ export component AppWindow inherits Window {
                                     alignment: end;
                                     toggle_bar := Rectangle {
                                         width: 54px;
-                                        height: 26px;
-                                        border-radius: 13px;
+                                        height: 24px;
+                                        border-radius: 12px;
                                         background: root.cfg_show_status_bar ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -914,25 +1146,25 @@ export component AppWindow inherits Window {
                         // Group 2: Search Engine
                         Text {
                             text: "SEARCH & ENGINE";
-                            color: #0a84ff;
+                            color: root.col_kbd_accent;
                             font-size: 11px;
                             font-weight: 700;
                         }
 
                         // Setting: Match Full Path
                         Rectangle {
-                            height: 38px;
-                            background: #2c2c2e;
+                            height: 36px;
+                            background: root.col_settings_card_bg;
                             border-radius: 8px;
                             border-width: 1px;
-                            border-color: #38383a;
+                            border-color: root.col_settings_card_border;
                             HorizontalLayout {
                                 padding-left: 14px;
                                 padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Match Full File & Directory Paths";
-                                    color: #f5f5f7;
+                                    color: root.col_settings_card_text;
                                     font-size: 13px;
                                     font-weight: 500;
                                     vertical-alignment: center;
@@ -941,8 +1173,8 @@ export component AppWindow inherits Window {
                                     alignment: end;
                                     toggle_path := Rectangle {
                                         width: 54px;
-                                        height: 26px;
-                                        border-radius: 13px;
+                                        height: 24px;
+                                        border-radius: 12px;
                                         background: root.cfg_enable_path_matching ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -967,18 +1199,18 @@ export component AppWindow inherits Window {
 
                         // Setting: Max Results Selector
                         Rectangle {
-                            height: 38px;
-                            background: #2c2c2e;
+                            height: 36px;
+                            background: root.col_settings_card_bg;
                             border-radius: 8px;
                             border-width: 1px;
-                            border-color: #38383a;
+                            border-color: root.col_settings_card_border;
                             HorizontalLayout {
                                 padding-left: 14px;
                                 padding-right: 14px;
                                 alignment: space-between;
                                 Text {
                                     text: "Max Visible Search Results";
-                                    color: #f5f5f7;
+                                    color: root.col_settings_card_text;
                                     font-size: 13px;
                                     font-weight: 500;
                                     vertical-alignment: center;
@@ -989,11 +1221,11 @@ export component AppWindow inherits Window {
 
                                     for num in [5, 7, 9] : Rectangle {
                                         width: 36px;
-                                        height: 26px;
+                                        height: 24px;
                                         border-radius: 6px;
-                                        background: (root.cfg_max_results == num) ? #007aff : #1e1e20;
+                                        background: (root.cfg_max_results == num) ? #007aff : root.col_kbd_bg;
                                         border-width: 1px;
-                                        border-color: (root.cfg_max_results == num) ? #007aff : #3a3a3c;
+                                        border-color: (root.cfg_max_results == num) ? #007aff : root.col_settings_card_border;
                                         TouchArea {
                                             clicked => {
                                                 root.cfg_max_results = num;
@@ -1003,7 +1235,7 @@ export component AppWindow inherits Window {
                                             alignment: center;
                                             Text {
                                                 text: "\{num}";
-                                                color: (root.cfg_max_results == num) ? #ffffff : #8e8e93;
+                                                color: (root.cfg_max_results == num) ? #ffffff : root.col_text_muted;
                                                 font-size: 12px;
                                                 font-weight: 700;
                                                 vertical-alignment: center;
@@ -1025,7 +1257,7 @@ export component AppWindow inherits Window {
                         horizontal-alignment: center;
                     }
 
-                    Rectangle { height: 1px; background: #333336; }
+                    Rectangle { height: 1px; background: root.col_separator; }
 
                     // 3. Action Buttons
                     HorizontalLayout {
@@ -1035,10 +1267,10 @@ export component AppWindow inherits Window {
 
                         // Button: Open Raw config.toml
                         raw_btn := Rectangle {
-                            background: raw_touch.has-hover ? #3a3a3c : #2c2c2e;
+                            background: raw_touch.has-hover ? root.col_btn_secondary_hover : root.col_btn_secondary_bg;
                             border-radius: 8px;
                             border-width: 1px;
-                            border-color: #38383a;
+                            border-color: root.col_settings_card_border;
 
                             raw_touch := TouchArea {
                                 clicked => {
@@ -1052,7 +1284,7 @@ export component AppWindow inherits Window {
                                 alignment: center;
                                 Text {
                                     text: "📝 Edit config.toml";
-                                    color: #ebebf5;
+                                    color: root.col_btn_secondary_text;
                                     font-size: 12px;
                                     font-weight: 600;
                                     vertical-alignment: center;
@@ -1074,7 +1306,9 @@ export component AppWindow inherits Window {
                                         root.cfg_max_results,
                                         root.cfg_max_depth,
                                         root.cfg_autostart,
-                                        root.cfg_compact_empty
+                                        root.cfg_compact_empty,
+                                        root.cfg_theme_mode,
+                                        root.cfg_theme_opacity
                                     );
                                 }
                             }

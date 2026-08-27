@@ -153,6 +153,7 @@ fn populate_items(
     let is_win_mode = trimmed.starts_with("@w") || trimmed.starts_with("@win");
     let is_clip_mode = trimmed.starts_with("@c") || trimmed.starts_with("@clip");
     let is_sys_mode = trimmed.starts_with("@sys") || trimmed.starts_with("@power");
+    let is_theme_mode = trimmed.starts_with("@theme") || trimmed.starts_with("@mode") || trimmed.starts_with("@opacity");
 
     let mode_badge = if is_file_mode {
         "Files"
@@ -162,6 +163,8 @@ fn populate_items(
         "Clipboard"
     } else if is_sys_mode {
         "System"
+    } else if is_theme_mode {
+        "Theme"
     } else {
         ""
     };
@@ -180,6 +183,8 @@ fn populate_items(
         ("CLIPBOARD", "items")
     } else if is_sys_mode {
         ("SYSTEM", "actions")
+    } else if is_theme_mode {
+        ("THEME & OPACITY", "options")
     } else {
         ("APPLICATIONS", "apps")
     };
@@ -262,6 +267,9 @@ fn populate_items(
             launcher::ItemType::System => {
                 (None, "System".to_string())
             }
+            launcher::ItemType::Theme => {
+                (None, "Theme".to_string())
+            }
             launcher::ItemType::Dmenu => {
                 (None, "".to_string())
             }
@@ -278,6 +286,7 @@ fn populate_items(
             launcher::ItemType::Window => "win",
             launcher::ItemType::Clipboard => "clip",
             launcher::ItemType::System => "sys",
+            launcher::ItemType::Theme => "theme",
             launcher::ItemType::Dmenu => "dmenu",
         };
 
@@ -297,6 +306,26 @@ fn populate_items(
     ui.set_items(model.into());
 
     current_items
+}
+
+fn apply_theme_command(ui: &AppWindow, cmd: &str) {
+    let mut cfg = Config::load();
+    if cmd == "theme:dark" {
+        cfg.theme.mode = "dark".to_string();
+    } else if cmd == "theme:light" {
+        cfg.theme.mode = "light".to_string();
+    } else if cmd == "theme:system" {
+        cfg.theme.mode = "system".to_string();
+    } else if let Some(op_str) = cmd.strip_prefix("theme:opacity:") {
+        if let Ok(val) = op_str.parse::<f32>() {
+            cfg.theme.opacity = (val / 100.0).clamp(0.50, 1.00);
+        }
+    }
+    let _ = cfg.save();
+    let is_dark = cfg.theme.is_dark();
+    ui.set_is_dark(is_dark);
+    ui.set_cfg_theme_mode(cfg.theme.mode.clone().into());
+    ui.set_cfg_theme_opacity(cfg.theme.opacity);
 }
 
 fn ensure_selection_visible(ui: &AppWindow, selected_index: i32) {
@@ -327,6 +356,9 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_cfg_show_icons(false);
     ui.set_cfg_show_status_bar(true);
     ui.set_cfg_max_results(8);
+    ui.set_cfg_theme_mode("dark".into());
+    ui.set_cfg_theme_opacity(0.95);
+    ui.set_is_dark(true);
 
     let icon_resolver = IconResolver::new();
     ui.set_settings_icon(icon_resolver.get_gear_icon());
@@ -533,6 +565,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_cfg_enable_path_matching(config.search.enable_path_matching.unwrap_or(true));
     ui.set_cfg_max_results(config.search.max_results as i32);
     ui.set_cfg_max_depth(config.search.max_depth as i32);
+    ui.set_cfg_theme_mode(config.theme.mode.clone().into());
+    ui.set_cfg_theme_opacity(config.theme.opacity);
+    ui.set_is_dark(config.theme.is_dark());
 
     let engine = Arc::new(LauncherEngine::new(config));
     let icon_resolver = Arc::new(IconResolver::new());
@@ -780,6 +815,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 6. Connect Item Activated (Enter key)
     {
         let engine = engine.clone();
+        let icon_resolver = icon_resolver.clone();
         let current_results = current_results.clone();
         let ui_weak = ui.as_weak();
 
@@ -794,6 +830,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             if let Some(item) = item_opt {
+                if item.item_type == launcher::ItemType::Theme {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        apply_theme_command(&ui, &item.exec_or_path);
+                        let items = populate_items(&ui, &engine, &icon_resolver, &ui.get_search_text());
+                        if let Ok(mut lock) = current_results.write() {
+                            *lock = items;
+                        }
+                    }
+                    return;
+                }
+
                 if let Some(ui) = ui_weak.upgrade() {
                     let _ = ui.hide();
                     ui.set_search_text("".into());
@@ -861,7 +908,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[DEBUG] on_open_config ENTER at {:?}", start);
             }
             if let Some(ui) = ui_weak.upgrade() {
+                let cfg = Config::load();
                 ui.set_cfg_autostart(view_launcher::config::is_autostart_enabled());
+                ui.set_cfg_theme_mode(cfg.theme.mode.clone().into());
+                ui.set_cfg_theme_opacity(cfg.theme.opacity);
+                ui.set_is_dark(cfg.theme.is_dark());
                 ui.set_in_settings_mode(true);
                 ui.set_settings_status("".into());
                 ui.invoke_focus_settings();
@@ -896,18 +947,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let engine = engine.clone();
         let icon_resolver = icon_resolver.clone();
         let current_results = current_results.clone();
-        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth, autostart, compact_empty| {
+        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth, autostart, compact_empty, theme_mode, theme_opacity| {
             let mut cfg = Config::load();
             cfg.general.autostart = autostart;
             cfg.theme.show_icons = Some(show_icons);
             cfg.theme.show_status_bar = Some(show_status_bar);
             cfg.theme.compact_empty_view = Some(compact_empty);
+            cfg.theme.mode = theme_mode.to_string();
+            cfg.theme.opacity = theme_opacity;
             cfg.search.enable_path_matching = Some(enable_path);
             cfg.search.max_results = max_results as usize;
             cfg.search.max_depth = max_depth as usize;
             let _ = cfg.save();
 
+            let is_dark = cfg.theme.is_dark();
             if let Some(ui) = ui_weak.upgrade() {
+                ui.set_is_dark(is_dark);
+                ui.set_cfg_theme_mode(theme_mode);
+                ui.set_cfg_theme_opacity(theme_opacity);
                 ui.set_settings_status("✔ Configuration saved to ~/.config/view-launcher/config.toml".into());
                 let items = populate_items(&ui, &engine, &icon_resolver, &ui.get_search_text());
                 if let Ok(mut lock) = current_results.write() {
