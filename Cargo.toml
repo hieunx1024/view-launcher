@@ -1,6 +1,6 @@
 [package]
 name = "view-launcher"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 authors = ["Hieu Nguyen <hieunx@outlook.com>"]
 description = "A minimalist, high-performance desktop app & file launcher in Rust (<5ms)"
