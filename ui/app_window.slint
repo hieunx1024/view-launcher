@@ -764,29 +764,25 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    toggle_autostart := Rectangle {
-                                        width: 48px;
-                                        height: 22px;
-                                        border-radius: 11px;
-                                        background: root.cfg_autostart ? #34c759 : #3a3a3c;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_autostart = !root.cfg_autostart;
-                                            }
+                                toggle_autostart := Rectangle {
+                                    width: 48px;
+                                    height: 22px;
+                                    border-radius: 11px;
+                                    background: root.cfg_autostart ? #34c759 : #3a3a3c;
+                                    TouchArea {
+                                        clicked => {
+                                            root.cfg_autostart = !root.cfg_autostart;
                                         }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: root.cfg_autostart ? "ON" : "OFF";
-                                                color: root.cfg_autostart ? #ffffff : #8e8e93;
-                                                font-size: 10px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
-                                            }
-                                        }
+                                    }
+                                    Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: root.cfg_autostart ? "ON" : "OFF";
+                                        color: root.cfg_autostart ? #ffffff : #8e8e93;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
                                     }
                                 }
                             }
@@ -818,81 +814,79 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    Rectangle {
-                                        background: root.col_kbd_bg;
-                                        border-radius: 6px;
-                                        border-width: 1px;
-                                        border-color: root.col_settings_card_border;
-                                        height: 26px;
-                                        HorizontalLayout {
-                                            padding: 2px;
-                                            spacing: 2px;
+                                Rectangle {
+                                    width: 176px;
+                                    height: 26px;
+                                    background: root.col_kbd_bg;
+                                    border-radius: 6px;
+                                    border-width: 1px;
+                                    border-color: root.col_settings_card_border;
+                                    HorizontalLayout {
+                                        padding: 2px;
+                                        spacing: 2px;
 
-                                            // Dark
-                                            Rectangle {
-                                                width: 54px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_mode == "dark") ? #007aff : transparent;
-                                                TouchArea {
-                                                    clicked => {
-                                                        root.cfg_theme_mode = "dark";
-                                                        root.is_dark = true;
-                                                    }
-                                                }
-                                                Text {
-                                                    text: "Dark";
-                                                    color: (root.cfg_theme_mode == "dark") ? #ffffff : root.col_text_muted;
-                                                    font-size: 11px;
-                                                    font-weight: (root.cfg_theme_mode == "dark") ? 700 : 500;
-                                                    vertical-alignment: center;
-                                                    horizontal-alignment: center;
+                                        // Dark
+                                        Rectangle {
+                                            width: 56px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_mode == "dark") ? #007aff : transparent;
+                                            TouchArea {
+                                                clicked => {
+                                                    root.cfg_theme_mode = "dark";
+                                                    root.is_dark = true;
                                                 }
                                             }
+                                            Text {
+                                                text: "Dark";
+                                                color: (root.cfg_theme_mode == "dark") ? #ffffff : root.col_text_muted;
+                                                font-size: 11px;
+                                                font-weight: (root.cfg_theme_mode == "dark") ? 700 : 500;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
 
-                                            // Light
-                                            Rectangle {
-                                                width: 54px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_mode == "light") ? #007aff : transparent;
-                                                TouchArea {
-                                                    clicked => {
-                                                        root.cfg_theme_mode = "light";
-                                                        root.is_dark = false;
-                                                    }
-                                                }
-                                                Text {
-                                                    text: "Light";
-                                                    color: (root.cfg_theme_mode == "light") ? #ffffff : root.col_text_muted;
-                                                    font-size: 11px;
-                                                    font-weight: (root.cfg_theme_mode == "light") ? 700 : 500;
-                                                    vertical-alignment: center;
-                                                    horizontal-alignment: center;
+                                        // Light
+                                        Rectangle {
+                                            width: 56px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_mode == "light") ? #007aff : transparent;
+                                            TouchArea {
+                                                clicked => {
+                                                    root.cfg_theme_mode = "light";
+                                                    root.is_dark = false;
                                                 }
                                             }
+                                            Text {
+                                                text: "Light";
+                                                color: (root.cfg_theme_mode == "light") ? #ffffff : root.col_text_muted;
+                                                font-size: 11px;
+                                                font-weight: (root.cfg_theme_mode == "light") ? 700 : 500;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                        }
 
-                                            // System
-                                            Rectangle {
-                                                width: 58px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_mode == "system") ? #007aff : transparent;
-                                                TouchArea {
-                                                    clicked => {
-                                                        root.cfg_theme_mode = "system";
-                                                    }
+                                        // System
+                                        Rectangle {
+                                            width: 56px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_mode == "system") ? #007aff : transparent;
+                                            TouchArea {
+                                                clicked => {
+                                                    root.cfg_theme_mode = "system";
                                                 }
-                                                Text {
-                                                    text: "System";
-                                                    color: (root.cfg_theme_mode == "system") ? #ffffff : root.col_text_muted;
-                                                    font-size: 11px;
-                                                    font-weight: (root.cfg_theme_mode == "system") ? 700 : 500;
-                                                    vertical-alignment: center;
-                                                    horizontal-alignment: center;
-                                                }
+                                            }
+                                            Text {
+                                                text: "System";
+                                                color: (root.cfg_theme_mode == "system") ? #ffffff : root.col_text_muted;
+                                                font-size: 11px;
+                                                font-weight: (root.cfg_theme_mode == "system") ? 700 : 500;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
                                             }
                                         }
                                     }
@@ -918,67 +912,65 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    Rectangle {
-                                        background: root.col_kbd_bg;
-                                        border-radius: 6px;
-                                        border-width: 1px;
-                                        border-color: root.col_settings_card_border;
-                                        height: 26px;
-                                        HorizontalLayout {
-                                            padding: 2px;
-                                            spacing: 2px;
+                                Rectangle {
+                                    width: 222px;
+                                    height: 26px;
+                                    background: root.col_kbd_bg;
+                                    border-radius: 6px;
+                                    border-width: 1px;
+                                    border-color: root.col_settings_card_border;
+                                    HorizontalLayout {
+                                        padding: 2px;
+                                        spacing: 2px;
 
-                                            // 100%
-                                            Rectangle {
-                                                width: 42px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_opacity >= 0.98) ? #007aff : transparent;
-                                                TouchArea { clicked => { root.cfg_theme_opacity = 1.0; } }
-                                                Text { text: "100%"; color: (root.cfg_theme_opacity >= 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.98) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
-                                            }
+                                        // 100%
+                                        Rectangle {
+                                            width: 42px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_opacity >= 0.98) ? #007aff : transparent;
+                                            TouchArea { clicked => { root.cfg_theme_opacity = 1.0; } }
+                                            Text { text: "100%"; color: (root.cfg_theme_opacity >= 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.98) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                        }
 
-                                            // 95%
-                                            Rectangle {
-                                                width: 40px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #007aff : transparent;
-                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.95; } }
-                                                Text { text: "95%"; color: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
-                                            }
+                                        // 95%
+                                        Rectangle {
+                                            width: 42px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #007aff : transparent;
+                                            TouchArea { clicked => { root.cfg_theme_opacity = 0.95; } }
+                                            Text { text: "95%"; color: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                        }
 
-                                            // 90%
-                                            Rectangle {
-                                                width: 40px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #007aff : transparent;
-                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.90; } }
-                                                Text { text: "90%"; color: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
-                                            }
+                                        // 90%
+                                        Rectangle {
+                                            width: 42px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #007aff : transparent;
+                                            TouchArea { clicked => { root.cfg_theme_opacity = 0.90; } }
+                                            Text { text: "90%"; color: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                        }
 
-                                            // 80%
-                                            Rectangle {
-                                                width: 40px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #007aff : transparent;
-                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.80; } }
-                                                Text { text: "80%"; color: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
-                                            }
+                                        // 80%
+                                        Rectangle {
+                                            width: 42px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #007aff : transparent;
+                                            TouchArea { clicked => { root.cfg_theme_opacity = 0.80; } }
+                                            Text { text: "80%"; color: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                        }
 
-                                            // 70%
-                                            Rectangle {
-                                                width: 40px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_theme_opacity < 0.76) ? #007aff : transparent;
-                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.70; } }
-                                                Text { text: "70%"; color: (root.cfg_theme_opacity < 0.76) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity < 0.76) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
-                                            }
+                                        // 70%
+                                        Rectangle {
+                                            width: 42px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_theme_opacity < 0.76) ? #007aff : transparent;
+                                            TouchArea { clicked => { root.cfg_theme_opacity = 0.70; } }
+                                            Text { text: "70%"; color: (root.cfg_theme_opacity < 0.76) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity < 0.76) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
                                         }
                                     }
                                 }
@@ -1003,29 +995,25 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    toggle_icon := Rectangle {
-                                        width: 48px;
-                                        height: 22px;
-                                        border-radius: 11px;
-                                        background: root.cfg_show_icons ? #34c759 : #3a3a3c;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_show_icons = !root.cfg_show_icons;
-                                            }
+                                toggle_icon := Rectangle {
+                                    width: 48px;
+                                    height: 22px;
+                                    border-radius: 11px;
+                                    background: root.cfg_show_icons ? #34c759 : #3a3a3c;
+                                    TouchArea {
+                                        clicked => {
+                                            root.cfg_show_icons = !root.cfg_show_icons;
                                         }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: root.cfg_show_icons ? "ON" : "OFF";
-                                                color: root.cfg_show_icons ? #ffffff : #8e8e93;
-                                                font-size: 10px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
-                                            }
-                                        }
+                                    }
+                                    Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: root.cfg_show_icons ? "ON" : "OFF";
+                                        color: root.cfg_show_icons ? #ffffff : #8e8e93;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
                                     }
                                 }
                             }
@@ -1049,29 +1037,25 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    toggle_compact := Rectangle {
-                                        width: 48px;
-                                        height: 22px;
-                                        border-radius: 11px;
-                                        background: root.cfg_compact_empty ? #34c759 : #3a3a3c;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_compact_empty = !root.cfg_compact_empty;
-                                            }
+                                toggle_compact := Rectangle {
+                                    width: 48px;
+                                    height: 22px;
+                                    border-radius: 11px;
+                                    background: root.cfg_compact_empty ? #34c759 : #3a3a3c;
+                                    TouchArea {
+                                        clicked => {
+                                            root.cfg_compact_empty = !root.cfg_compact_empty;
                                         }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: root.cfg_compact_empty ? "ON" : "OFF";
-                                                color: root.cfg_compact_empty ? #ffffff : #8e8e93;
-                                                font-size: 10px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
-                                            }
-                                        }
+                                    }
+                                    Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: root.cfg_compact_empty ? "ON" : "OFF";
+                                        color: root.cfg_compact_empty ? #ffffff : #8e8e93;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
                                     }
                                 }
                             }
@@ -1095,29 +1079,25 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    toggle_bar := Rectangle {
-                                        width: 48px;
-                                        height: 22px;
-                                        border-radius: 11px;
-                                        background: root.cfg_show_status_bar ? #34c759 : #3a3a3c;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_show_status_bar = !root.cfg_show_status_bar;
-                                            }
+                                toggle_bar := Rectangle {
+                                    width: 48px;
+                                    height: 22px;
+                                    border-radius: 11px;
+                                    background: root.cfg_show_status_bar ? #34c759 : #3a3a3c;
+                                    TouchArea {
+                                        clicked => {
+                                            root.cfg_show_status_bar = !root.cfg_show_status_bar;
                                         }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: root.cfg_show_status_bar ? "ON" : "OFF";
-                                                color: root.cfg_show_status_bar ? #ffffff : #8e8e93;
-                                                font-size: 10px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
-                                            }
-                                        }
+                                    }
+                                    Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: root.cfg_show_status_bar ? "ON" : "OFF";
+                                        color: root.cfg_show_status_bar ? #ffffff : #8e8e93;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
                                     }
                                 }
                             }
@@ -1149,29 +1129,25 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    toggle_path := Rectangle {
-                                        width: 48px;
-                                        height: 22px;
-                                        border-radius: 11px;
-                                        background: root.cfg_enable_path_matching ? #34c759 : #3a3a3c;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_enable_path_matching = !root.cfg_enable_path_matching;
-                                            }
+                                toggle_path := Rectangle {
+                                    width: 48px;
+                                    height: 22px;
+                                    border-radius: 11px;
+                                    background: root.cfg_enable_path_matching ? #34c759 : #3a3a3c;
+                                    TouchArea {
+                                        clicked => {
+                                            root.cfg_enable_path_matching = !root.cfg_enable_path_matching;
                                         }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: root.cfg_enable_path_matching ? "ON" : "OFF";
-                                                color: root.cfg_enable_path_matching ? #ffffff : #8e8e93;
-                                                font-size: 10px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
-                                            }
-                                        }
+                                    }
+                                    Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: root.cfg_enable_path_matching ? "ON" : "OFF";
+                                        color: root.cfg_enable_path_matching ? #ffffff : #8e8e93;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
                                     }
                                 }
                             }
@@ -1195,36 +1171,34 @@ export component AppWindow inherits Window {
                                     font-weight: 500;
                                     vertical-alignment: center;
                                 }
-                                HorizontalLayout {
-                                    alignment: end;
-                                    Rectangle {
-                                        background: root.col_kbd_bg;
-                                        border-radius: 6px;
-                                        border-width: 1px;
-                                        border-color: root.col_settings_card_border;
-                                        height: 26px;
-                                        HorizontalLayout {
-                                            padding: 2px;
-                                            spacing: 2px;
+                                Rectangle {
+                                    width: 104px;
+                                    height: 26px;
+                                    background: root.col_kbd_bg;
+                                    border-radius: 6px;
+                                    border-width: 1px;
+                                    border-color: root.col_settings_card_border;
+                                    HorizontalLayout {
+                                        padding: 2px;
+                                        spacing: 2px;
 
-                                            for num in [5, 7, 9] : Rectangle {
-                                                width: 32px;
-                                                height: 22px;
-                                                border-radius: 4px;
-                                                background: (root.cfg_max_results == num) ? #007aff : transparent;
-                                                TouchArea {
-                                                    clicked => {
-                                                        root.cfg_max_results = num;
-                                                    }
+                                        for num in [5, 7, 9] : Rectangle {
+                                            width: 32px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: (root.cfg_max_results == num) ? #007aff : transparent;
+                                            TouchArea {
+                                                clicked => {
+                                                    root.cfg_max_results = num;
                                                 }
-                                                Text {
-                                                    text: "\{num}";
-                                                    color: (root.cfg_max_results == num) ? #ffffff : root.col_text_muted;
-                                                    font-size: 11px;
-                                                    font-weight: (root.cfg_max_results == num) ? 700 : 500;
-                                                    vertical-alignment: center;
-                                                    horizontal-alignment: center;
-                                                }
+                                            }
+                                            Text {
+                                                text: "\{num}";
+                                                color: (root.cfg_max_results == num) ? #ffffff : root.col_text_muted;
+                                                font-size: 11px;
+                                                font-weight: (root.cfg_max_results == num) ? 700 : 500;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
                                             }
                                         }
                                     }
