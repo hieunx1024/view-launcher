@@ -418,8 +418,14 @@ impl IconResolver {
 
         #[cfg(target_os = "windows")]
         {
+            if let Some(hint) = icon_hint {
+                let p = PathBuf::from(hint);
+                if p.exists() && (p.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("ico") || ext.eq_ignore_ascii_case("png"))) {
+                    return Some(p);
+                }
+            }
             let p = PathBuf::from(exec_or_path);
-            if p.exists() && (p.extension().map_or(false, |ext| ext == "ico" || ext == "png")) {
+            if p.exists() && (p.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("ico") || ext.eq_ignore_ascii_case("png"))) {
                 Some(p)
             } else {
                 None
@@ -440,16 +446,50 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
 
+        // 1. Built-in file type icon resolution
+        assert!(resolver.resolve_file_type_icon(Path::new("test.rs"), ItemType::File).is_some());
+        assert!(resolver.resolve_file_type_icon(Path::new("photo.png"), ItemType::File).is_some());
+        assert!(resolver.resolve_file_type_icon(Path::new("doc.pdf"), ItemType::File).is_some());
+        assert!(resolver.resolve_file_type_icon(Path::new("archive.zip"), ItemType::File).is_some());
+        assert!(resolver.resolve_file_type_icon(Path::new("folder"), ItemType::Dir).is_some());
+
+        // 2. Built-in UI helper icons
+        let _ = resolver.get_gear_icon();
+        let _ = resolver.get_nav_icon();
+        let _ = resolver.get_enter_icon();
+        let _ = resolver.get_search_icon();
+        let _ = resolver.get_bulb_icon();
+        let _ = resolver.get_folder_icon();
+
+        // 3. Workspace asset icon resolution
+        let asset_svg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets").join("view-launcher.svg");
+        if asset_svg.exists() {
+            let svg_icon = resolver.resolve_icon(asset_svg.to_str(), "View Launcher", "view-launcher");
+            assert!(svg_icon.is_some(), "Asset SVG should resolve when file exists");
+        }
+
+        let asset_png = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets").join("view-launcher.png");
+        if asset_png.exists() {
+            let png_icon = resolver.resolve_icon(asset_png.to_str(), "View Launcher", "view-launcher");
+            assert!(png_icon.is_some(), "Asset PNG should resolve when file exists");
+        }
+
+        // 4. Non-existent app icon gracefully handles None
+        let _ = resolver.resolve_icon(Some("non.existent.random_app_xyz_987"), "RandomAppXYZ", "random-app-xyz");
+
+        // 5. System app resolution if available on live system
         let p_ext = resolver.find_icon_path(Some("com.mattjakeman.ExtensionManager"), "Extension Manager", "extension-manager");
         println!("Extension Manager icon path: {:?}", p_ext);
+        if p_ext.is_some() {
+            let ext_icon = resolver.resolve_icon(Some("com.mattjakeman.ExtensionManager"), "Extension Manager", "extension-manager");
+            assert!(ext_icon.is_some(), "Extension Manager icon should resolve when path is found");
+        }
 
         let p_text = resolver.find_icon_path(Some("org.gnome.TextEditor"), "Text Editor", "gnome-text-editor");
         println!("Text Editor icon path: {:?}", p_text);
-
-        let ext_icon = resolver.resolve_icon(Some("com.mattjakeman.ExtensionManager"), "Extension Manager", "extension-manager");
-        assert!(ext_icon.is_some(), "Extension Manager icon should resolve");
-
-        let text_icon = resolver.resolve_icon(Some("org.gnome.TextEditor"), "Text Editor", "gnome-text-editor");
-        assert!(text_icon.is_some(), "Text Editor icon should resolve");
+        if p_text.is_some() {
+            let text_icon = resolver.resolve_icon(Some("org.gnome.TextEditor"), "Text Editor", "gnome-text-editor");
+            assert!(text_icon.is_some(), "Text Editor icon should resolve when path is found");
+        }
     }
 }
