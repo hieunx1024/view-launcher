@@ -1026,21 +1026,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let ui_weak = ui.as_weak();
         std::thread::spawn(move || {
-            let mut last_dark: Option<bool> = None;
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_millis(400));
                 let current_dark = view_launcher::config::is_system_dark_mode();
-                if last_dark != Some(current_dark) {
-                    last_dark = Some(current_dark);
-                    let ui_w = ui_weak.clone();
-                    let _ = slint::invoke_from_event_loop(move || {
-                        if let Some(ui) = ui_w.upgrade() {
-                            if ui.get_cfg_theme_mode() == "system" {
-                                ui.set_is_dark(current_dark);
-                            }
+                let ui_w = ui_weak.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(ui) = ui_w.upgrade() {
+                        if ui.get_cfg_theme_mode() == "system" && ui.get_is_dark() != current_dark {
+                            ui.set_is_dark(current_dark);
                         }
-                    });
-                }
+                    }
+                });
             }
         });
     }

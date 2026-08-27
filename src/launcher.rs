@@ -1825,6 +1825,12 @@ mod tests {
         theme.mode = "dark".to_string();
         assert!(theme.is_dark());
     }
+
+    #[test]
+    fn test_system_dark_mode_live() {
+        let is_dark = crate::config::is_system_dark_mode();
+        println!(">>> Current is_system_dark_mode(): {}", is_dark);
+    }
 }
 
 
