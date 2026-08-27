@@ -117,7 +117,7 @@ export component AppWindow inherits Window {
         x: 0px;
         y: 0px;
         width: 100%;
-        height: root.is_showing_list ? 520px : 56px;
+        height: root.in_settings_mode ? 560px : (root.is_showing_list ? 520px : 56px);
         animate height { duration: 140ms; easing: ease-out; }
         background: root.col_card_bg;
         border-radius: 14px;
@@ -447,7 +447,7 @@ export component AppWindow inherits Window {
                                             Text {
                                                 width: 100%;
                                                 height: 100%;
-                                                text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "📁" : ((item.item_type == "clip") ? "📋" : ((item.item_type == "win") ? "🗔" : ((item.item_type == "sys") ? "⚡" : ((item.item_type == "theme") ? "🎨" : "◆")))));
+                                                text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "/" : ((item.item_type == "clip") ? "≡" : ((item.item_type == "win") ? "□" : ((item.item_type == "sys") ? "⚙" : ((item.item_type == "theme") ? "◐" : "◆")))));
                                                 color: (index == root.selected_index) ? #ffffff : root.col_badge_text;
                                                 font-size: 15px;
                                                 font-weight: 700;
@@ -736,7 +736,7 @@ export component AppWindow inherits Window {
                     // 1. Settings Content Area
                     VerticalLayout {
                         vertical-stretch: 1;
-                        spacing: 8px;
+                        spacing: 7px;
 
                         // Group 0: System & Startup
                         Text {
@@ -767,9 +767,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_autostart := Rectangle {
-                                        width: 54px;
-                                        height: 24px;
-                                        border-radius: 12px;
+                                        width: 48px;
+                                        height: 22px;
+                                        border-radius: 11px;
                                         background: root.cfg_autostart ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -781,7 +781,7 @@ export component AppWindow inherits Window {
                                             Text {
                                                 text: root.cfg_autostart ? "ON" : "OFF";
                                                 color: root.cfg_autostart ? #ffffff : #8e8e93;
-                                                font-size: 11px;
+                                                font-size: 10px;
                                                 font-weight: 700;
                                                 vertical-alignment: center;
                                                 horizontal-alignment: center;
@@ -819,85 +819,80 @@ export component AppWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                                 HorizontalLayout {
-                                    spacing: 6px;
                                     alignment: end;
-
-                                    // Dark Button
                                     Rectangle {
-                                        width: 66px;
-                                        height: 24px;
+                                        background: root.col_kbd_bg;
                                         border-radius: 6px;
-                                        background: (root.cfg_theme_mode == "dark") ? #007aff : root.col_kbd_bg;
                                         border-width: 1px;
-                                        border-color: (root.cfg_theme_mode == "dark") ? #007aff : root.col_settings_card_border;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_theme_mode = "dark";
-                                                root.is_dark = true;
-                                            }
-                                        }
+                                        border-color: root.col_settings_card_border;
+                                        height: 26px;
                                         HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: "🌙 Dark";
-                                                color: (root.cfg_theme_mode == "dark") ? #ffffff : root.col_text_muted;
-                                                font-size: 11px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
-                                            }
-                                        }
-                                    }
+                                            padding: 2px;
+                                            spacing: 2px;
 
-                                    // Light Button
-                                    Rectangle {
-                                        width: 66px;
-                                        height: 24px;
-                                        border-radius: 6px;
-                                        background: (root.cfg_theme_mode == "light") ? #007aff : root.col_kbd_bg;
-                                        border-width: 1px;
-                                        border-color: (root.cfg_theme_mode == "light") ? #007aff : root.col_settings_card_border;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_theme_mode = "light";
-                                                root.is_dark = false;
+                                            // Dark
+                                            Rectangle {
+                                                width: 54px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_mode == "dark") ? #007aff : transparent;
+                                                TouchArea {
+                                                    clicked => {
+                                                        root.cfg_theme_mode = "dark";
+                                                        root.is_dark = true;
+                                                    }
+                                                }
+                                                Text {
+                                                    text: "Dark";
+                                                    color: (root.cfg_theme_mode == "dark") ? #ffffff : root.col_text_muted;
+                                                    font-size: 11px;
+                                                    font-weight: (root.cfg_theme_mode == "dark") ? 700 : 500;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: center;
+                                                }
                                             }
-                                        }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: "☀️ Light";
-                                                color: (root.cfg_theme_mode == "light") ? #ffffff : root.col_text_muted;
-                                                font-size: 11px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
-                                            }
-                                        }
-                                    }
 
-                                    // System Button
-                                    Rectangle {
-                                        width: 66px;
-                                        height: 24px;
-                                        border-radius: 6px;
-                                        background: (root.cfg_theme_mode == "system") ? #007aff : root.col_kbd_bg;
-                                        border-width: 1px;
-                                        border-color: (root.cfg_theme_mode == "system") ? #007aff : root.col_settings_card_border;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_theme_mode = "system";
+                                            // Light
+                                            Rectangle {
+                                                width: 54px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_mode == "light") ? #007aff : transparent;
+                                                TouchArea {
+                                                    clicked => {
+                                                        root.cfg_theme_mode = "light";
+                                                        root.is_dark = false;
+                                                    }
+                                                }
+                                                Text {
+                                                    text: "Light";
+                                                    color: (root.cfg_theme_mode == "light") ? #ffffff : root.col_text_muted;
+                                                    font-size: 11px;
+                                                    font-weight: (root.cfg_theme_mode == "light") ? 700 : 500;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: center;
+                                                }
                                             }
-                                        }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: "🖥️ Auto";
-                                                color: (root.cfg_theme_mode == "system") ? #ffffff : root.col_text_muted;
-                                                font-size: 11px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
+
+                                            // System
+                                            Rectangle {
+                                                width: 58px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_mode == "system") ? #007aff : transparent;
+                                                TouchArea {
+                                                    clicked => {
+                                                        root.cfg_theme_mode = "system";
+                                                    }
+                                                }
+                                                Text {
+                                                    text: "System";
+                                                    color: (root.cfg_theme_mode == "system") ? #ffffff : root.col_text_muted;
+                                                    font-size: 11px;
+                                                    font-weight: (root.cfg_theme_mode == "system") ? 700 : 500;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: center;
+                                                }
                                             }
                                         }
                                     }
@@ -924,81 +919,66 @@ export component AppWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                                 HorizontalLayout {
-                                    spacing: 5px;
                                     alignment: end;
-
-                                    // 100%
                                     Rectangle {
-                                        width: 44px;
-                                        height: 24px;
+                                        background: root.col_kbd_bg;
                                         border-radius: 6px;
-                                        background: (root.cfg_theme_opacity >= 0.98) ? #007aff : root.col_kbd_bg;
                                         border-width: 1px;
-                                        border-color: (root.cfg_theme_opacity >= 0.98) ? #007aff : root.col_settings_card_border;
-                                        TouchArea { clicked => { root.cfg_theme_opacity = 1.0; } }
+                                        border-color: root.col_settings_card_border;
+                                        height: 26px;
                                         HorizontalLayout {
-                                            alignment: center;
-                                            Text { text: "100%"; color: (root.cfg_theme_opacity >= 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                    }
+                                            padding: 2px;
+                                            spacing: 2px;
 
-                                    // 95%
-                                    Rectangle {
-                                        width: 44px;
-                                        height: 24px;
-                                        border-radius: 6px;
-                                        background: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #007aff : root.col_kbd_bg;
-                                        border-width: 1px;
-                                        border-color: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #007aff : root.col_settings_card_border;
-                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.95; } }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text { text: "95%"; color: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                    }
+                                            // 100%
+                                            Rectangle {
+                                                width: 42px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_opacity >= 0.98) ? #007aff : transparent;
+                                                TouchArea { clicked => { root.cfg_theme_opacity = 1.0; } }
+                                                Text { text: "100%"; color: (root.cfg_theme_opacity >= 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.98) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                            }
 
-                                    // 90%
-                                    Rectangle {
-                                        width: 44px;
-                                        height: 24px;
-                                        border-radius: 6px;
-                                        background: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #007aff : root.col_kbd_bg;
-                                        border-width: 1px;
-                                        border-color: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #007aff : root.col_settings_card_border;
-                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.90; } }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text { text: "90%"; color: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                    }
+                                            // 95%
+                                            Rectangle {
+                                                width: 40px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #007aff : transparent;
+                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.95; } }
+                                                Text { text: "95%"; color: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.93 && root.cfg_theme_opacity < 0.98) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                            }
 
-                                    // 80%
-                                    Rectangle {
-                                        width: 44px;
-                                        height: 24px;
-                                        border-radius: 6px;
-                                        background: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #007aff : root.col_kbd_bg;
-                                        border-width: 1px;
-                                        border-color: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #007aff : root.col_settings_card_border;
-                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.80; } }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text { text: "80%"; color: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                    }
+                                            // 90%
+                                            Rectangle {
+                                                width: 40px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #007aff : transparent;
+                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.90; } }
+                                                Text { text: "90%"; color: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.86 && root.cfg_theme_opacity < 0.93) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                            }
 
-                                    // 70%
-                                    Rectangle {
-                                        width: 44px;
-                                        height: 24px;
-                                        border-radius: 6px;
-                                        background: (root.cfg_theme_opacity < 0.76) ? #007aff : root.col_kbd_bg;
-                                        border-width: 1px;
-                                        border-color: (root.cfg_theme_opacity < 0.76) ? #007aff : root.col_settings_card_border;
-                                        TouchArea { clicked => { root.cfg_theme_opacity = 0.70; } }
-                                        HorizontalLayout {
-                                            alignment: center;
-                                            Text { text: "70%"; color: (root.cfg_theme_opacity < 0.76) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                            // 80%
+                                            Rectangle {
+                                                width: 40px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #007aff : transparent;
+                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.80; } }
+                                                Text { text: "80%"; color: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity >= 0.76 && root.cfg_theme_opacity < 0.86) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                            }
+
+                                            // 70%
+                                            Rectangle {
+                                                width: 40px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_theme_opacity < 0.76) ? #007aff : transparent;
+                                                TouchArea { clicked => { root.cfg_theme_opacity = 0.70; } }
+                                                Text { text: "70%"; color: (root.cfg_theme_opacity < 0.76) ? #ffffff : root.col_text_muted; font-size: 11px; font-weight: (root.cfg_theme_opacity < 0.76) ? 700 : 500; vertical-alignment: center; horizontal-alignment: center; }
+                                            }
                                         }
                                     }
                                 }
@@ -1026,9 +1006,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_icon := Rectangle {
-                                        width: 54px;
-                                        height: 24px;
-                                        border-radius: 12px;
+                                        width: 48px;
+                                        height: 22px;
+                                        border-radius: 11px;
                                         background: root.cfg_show_icons ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -1040,7 +1020,7 @@ export component AppWindow inherits Window {
                                             Text {
                                                 text: root.cfg_show_icons ? "ON" : "OFF";
                                                 color: root.cfg_show_icons ? #ffffff : #8e8e93;
-                                                font-size: 11px;
+                                                font-size: 10px;
                                                 font-weight: 700;
                                                 vertical-alignment: center;
                                                 horizontal-alignment: center;
@@ -1072,9 +1052,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_compact := Rectangle {
-                                        width: 54px;
-                                        height: 24px;
-                                        border-radius: 12px;
+                                        width: 48px;
+                                        height: 22px;
+                                        border-radius: 11px;
                                         background: root.cfg_compact_empty ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -1086,7 +1066,7 @@ export component AppWindow inherits Window {
                                             Text {
                                                 text: root.cfg_compact_empty ? "ON" : "OFF";
                                                 color: root.cfg_compact_empty ? #ffffff : #8e8e93;
-                                                font-size: 11px;
+                                                font-size: 10px;
                                                 font-weight: 700;
                                                 vertical-alignment: center;
                                                 horizontal-alignment: center;
@@ -1118,9 +1098,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_bar := Rectangle {
-                                        width: 54px;
-                                        height: 24px;
-                                        border-radius: 12px;
+                                        width: 48px;
+                                        height: 22px;
+                                        border-radius: 11px;
                                         background: root.cfg_show_status_bar ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -1132,7 +1112,7 @@ export component AppWindow inherits Window {
                                             Text {
                                                 text: root.cfg_show_status_bar ? "ON" : "OFF";
                                                 color: root.cfg_show_status_bar ? #ffffff : #8e8e93;
-                                                font-size: 11px;
+                                                font-size: 10px;
                                                 font-weight: 700;
                                                 vertical-alignment: center;
                                                 horizontal-alignment: center;
@@ -1172,9 +1152,9 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     alignment: end;
                                     toggle_path := Rectangle {
-                                        width: 54px;
-                                        height: 24px;
-                                        border-radius: 12px;
+                                        width: 48px;
+                                        height: 22px;
+                                        border-radius: 11px;
                                         background: root.cfg_enable_path_matching ? #34c759 : #3a3a3c;
                                         TouchArea {
                                             clicked => {
@@ -1186,7 +1166,7 @@ export component AppWindow inherits Window {
                                             Text {
                                                 text: root.cfg_enable_path_matching ? "ON" : "OFF";
                                                 color: root.cfg_enable_path_matching ? #ffffff : #8e8e93;
-                                                font-size: 11px;
+                                                font-size: 10px;
                                                 font-weight: 700;
                                                 vertical-alignment: center;
                                                 horizontal-alignment: center;
@@ -1216,30 +1196,35 @@ export component AppWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                                 HorizontalLayout {
-                                    spacing: 6px;
                                     alignment: end;
-
-                                    for num in [5, 7, 9] : Rectangle {
-                                        width: 36px;
-                                        height: 24px;
+                                    Rectangle {
+                                        background: root.col_kbd_bg;
                                         border-radius: 6px;
-                                        background: (root.cfg_max_results == num) ? #007aff : root.col_kbd_bg;
                                         border-width: 1px;
-                                        border-color: (root.cfg_max_results == num) ? #007aff : root.col_settings_card_border;
-                                        TouchArea {
-                                            clicked => {
-                                                root.cfg_max_results = num;
-                                            }
-                                        }
+                                        border-color: root.col_settings_card_border;
+                                        height: 26px;
                                         HorizontalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: "\{num}";
-                                                color: (root.cfg_max_results == num) ? #ffffff : root.col_text_muted;
-                                                font-size: 12px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: center;
+                                            padding: 2px;
+                                            spacing: 2px;
+
+                                            for num in [5, 7, 9] : Rectangle {
+                                                width: 32px;
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: (root.cfg_max_results == num) ? #007aff : transparent;
+                                                TouchArea {
+                                                    clicked => {
+                                                        root.cfg_max_results = num;
+                                                    }
+                                                }
+                                                Text {
+                                                    text: "\{num}";
+                                                    color: (root.cfg_max_results == num) ? #ffffff : root.col_text_muted;
+                                                    font-size: 11px;
+                                                    font-weight: (root.cfg_max_results == num) ? 700 : 500;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: center;
+                                                }
                                             }
                                         }
                                     }
@@ -1261,14 +1246,14 @@ export component AppWindow inherits Window {
 
                     // 3. Action Buttons
                     HorizontalLayout {
-                        height: 36px;
+                        height: 32px;
                         spacing: 10px;
                         alignment: end;
 
                         // Button: Open Raw config.toml
                         raw_btn := Rectangle {
                             background: raw_touch.has-hover ? root.col_btn_secondary_hover : root.col_btn_secondary_bg;
-                            border-radius: 8px;
+                            border-radius: 6px;
                             border-width: 1px;
                             border-color: root.col_settings_card_border;
 
@@ -1283,7 +1268,7 @@ export component AppWindow inherits Window {
                                 padding-right: 14px;
                                 alignment: center;
                                 Text {
-                                    text: "📝 Edit config.toml";
+                                    text: "Edit config.toml";
                                     color: root.col_btn_secondary_text;
                                     font-size: 12px;
                                     font-weight: 600;
@@ -1295,7 +1280,7 @@ export component AppWindow inherits Window {
                         // Button: Save & Apply
                         save_btn := Rectangle {
                             background: save_touch.has-hover ? #0062d2 : #007aff;
-                            border-radius: 8px;
+                            border-radius: 6px;
 
                             save_touch := TouchArea {
                                 clicked => {

@@ -1032,7 +1032,7 @@ impl LauncherEngine {
 
             let theme_items = vec![
                 LauncherItem::new(
-                    "🌙 Dark Theme".to_string(),
+                    "Dark Theme".to_string(),
                     "theme:dark".to_string(),
                     ItemType::Theme,
                     Some("Switch to sleek dark palette with high contrast".to_string()),
@@ -1040,7 +1040,7 @@ impl LauncherEngine {
                     None,
                 ),
                 LauncherItem::new(
-                    "☀️ Light Theme".to_string(),
+                    "Light Theme".to_string(),
                     "theme:light".to_string(),
                     ItemType::Theme,
                     Some("Switch to clean, high-visibility light palette".to_string()),
@@ -1048,7 +1048,7 @@ impl LauncherEngine {
                     None,
                 ),
                 LauncherItem::new(
-                    "🖥️ Auto (Follow System Theme)".to_string(),
+                    "System Theme (Auto)".to_string(),
                     "theme:system".to_string(),
                     ItemType::Theme,
                     Some("Automatically match OS dark/light mode".to_string()),
@@ -1056,7 +1056,7 @@ impl LauncherEngine {
                     None,
                 ),
                 LauncherItem::new(
-                    "🎚️ Opacity: 100% (Solid)".to_string(),
+                    "Window Opacity: 100% (Solid)".to_string(),
                     "theme:opacity:100".to_string(),
                     ItemType::Theme,
                     Some("Set window opacity to 100% (opaque)".to_string()),
@@ -1064,7 +1064,7 @@ impl LauncherEngine {
                     None,
                 ),
                 LauncherItem::new(
-                    "🎚️ Opacity: 95% (Frosted Glass - Recommended)".to_string(),
+                    "Window Opacity: 95% (Frosted Glass - Recommended)".to_string(),
                     "theme:opacity:95".to_string(),
                     ItemType::Theme,
                     Some("Set window opacity to 95% (modern glassmorphism)".to_string()),
@@ -1072,7 +1072,7 @@ impl LauncherEngine {
                     None,
                 ),
                 LauncherItem::new(
-                    "🎚️ Opacity: 90% (Glass)".to_string(),
+                    "Window Opacity: 90% (Glass)".to_string(),
                     "theme:opacity:90".to_string(),
                     ItemType::Theme,
                     Some("Set window opacity to 90%".to_string()),
@@ -1080,7 +1080,7 @@ impl LauncherEngine {
                     None,
                 ),
                 LauncherItem::new(
-                    "🎚️ Opacity: 80% (Translucent)".to_string(),
+                    "Window Opacity: 80% (Translucent)".to_string(),
                     "theme:opacity:80".to_string(),
                     ItemType::Theme,
                     Some("Set window opacity to 80%".to_string()),
@@ -1088,7 +1088,7 @@ impl LauncherEngine {
                     None,
                 ),
                 LauncherItem::new(
-                    "🎚️ Opacity: 70% (High Transparency)".to_string(),
+                    "Window Opacity: 70% (High Transparency)".to_string(),
                     "theme:opacity:70".to_string(),
                     ItemType::Theme,
                     Some("Set window opacity to 70%".to_string()),
