@@ -1,6 +1,6 @@
 [package]
 name = "view-launcher"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 authors = ["Hieu Nguyen <hieunx@outlook.com>"]
 description = "A minimalist, high-performance desktop app & file launcher in Rust (<5ms)"
@@ -26,13 +26,22 @@ walkdir = "2.5"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 dirs = "5.0"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "bmp"] }
 resvg = "0.44"
 usvg = "0.44"
 tiny-skia = "0.11"
 rayon = "1.10"
 arboard = "3.4"
 serde_json = "1.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Com",
+] }
 
 [build-dependencies]
 slint-build = "=1.9.2"

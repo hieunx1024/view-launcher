@@ -350,6 +350,15 @@ fn ensure_selection_visible(ui: &AppWindow, selected_index: i32) {
 }
 
 fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(target_os = "windows")]
+    {
+        if std::env::var("SLINT_BACKEND").is_err() {
+            unsafe {
+                std::env::set_var("SLINT_BACKEND", "winit-software");
+            }
+        }
+    }
+
     use std::io::BufRead;
     let stdin = std::io::stdin();
     let raw_lines: Vec<String> = stdin.lock().lines().filter_map(|l| l.ok()).collect();
@@ -378,6 +387,11 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.window().with_winit_window(|winit_window| {
         winit_window.set_transparent(true);
         winit_window.set_decorations(false);
+        #[cfg(target_os = "windows")]
+        {
+            winit_window.set_visible(true);
+            winit_window.focus_window();
+        }
         if let Some(monitor) = winit_window.current_monitor().or_else(|| winit_window.primary_monitor()) {
             let screen_size = monitor.size();
             let scale_factor = monitor.scale_factor();
@@ -496,6 +510,16 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(target_os = "windows")]
+    {
+        if std::env::var("SLINT_BACKEND").is_err() {
+            // Default to winit-software on Windows for seamless window transparency and guaranteed DWM composition compatibility
+            unsafe {
+                std::env::set_var("SLINT_BACKEND", "winit-software");
+            }
+        }
+    }
+
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version" || a == "-v") {
         println!("view-launcher {}", env!("CARGO_PKG_VERSION"));
@@ -600,6 +624,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         winit_window.set_title("View Launcher");
         winit_window.set_transparent(true);
         winit_window.set_decorations(false);
+        #[cfg(target_os = "windows")]
+        {
+            winit_window.set_visible(true);
+            winit_window.focus_window();
+        }
         if let Some(icon) = app_icon_opt {
             winit_window.set_window_icon(Some(icon));
         }
@@ -1027,7 +1056,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ui_weak = ui.as_weak();
         std::thread::spawn(move || {
             loop {
+                #[cfg(target_os = "windows")]
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                #[cfg(not(target_os = "windows"))]
                 std::thread::sleep(std::time::Duration::from_millis(400));
+
                 let current_dark = view_launcher::config::is_system_dark_mode();
                 let ui_w = ui_weak.clone();
                 let _ = slint::invoke_from_event_loop(move || {

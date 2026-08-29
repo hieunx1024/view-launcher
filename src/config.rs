@@ -55,10 +55,11 @@ pub fn is_system_dark_mode() -> bool {
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
-        if let Ok(output) = Command::new("reg")
-            .args(&["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "/v", "AppsUseLightTheme"])
-            .output()
-        {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = Command::new("reg");
+        cmd.args(&["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "/v", "AppsUseLightTheme"]);
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        if let Ok(output) = cmd.output() {
             let text = String::from_utf8_lossy(&output.stdout);
             if text.contains("0x0") {
                 return true;

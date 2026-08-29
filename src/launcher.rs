@@ -255,7 +255,7 @@ impl LauncherEngine {
         }
     }
 
-    /// Indexes all standard Windows shortcut entries.
+    /// Indexes all standard Windows shortcut entries (.lnk and .url) from Start Menu and Desktop.
     #[cfg(target_os = "windows")]
     fn index_apps(&mut self) {
         let mut paths = Vec::new();
@@ -267,6 +267,15 @@ impl LauncherEngine {
             paths.push(path);
         }
         paths.push(PathBuf::from(r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"));
+        if let Some(desktop) = dirs::desktop_dir() {
+            paths.push(desktop);
+        }
+        if let Ok(public_dir) = std::env::var("PUBLIC") {
+            let p = PathBuf::from(public_dir).join("Desktop");
+            if p.exists() && !paths.contains(&p) {
+                paths.push(p);
+            }
+        }
 
         for path in paths {
             if !path.exists() {
@@ -274,19 +283,23 @@ impl LauncherEngine {
             }
             for entry in WalkDir::new(path).into_iter().flatten() {
                 let file_path = entry.path();
-                if file_path.extension().map_or(false, |ext| ext == "lnk") {
+                let is_app_shortcut = file_path.extension().map_or(false, |ext| {
+                    ext.eq_ignore_ascii_case("lnk") || ext.eq_ignore_ascii_case("url")
+                });
+
+                if is_app_shortcut {
                     let name = file_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
                     let exec = file_path.to_string_lossy().to_string();
                     
                     let is_hidden = self.hidden_apps.iter().any(|h| name.eq_ignore_ascii_case(h));
-                    if !is_hidden {
+                    if !is_hidden && !self.apps.iter().any(|item| item.name.eq_ignore_ascii_case(&name)) {
                         self.apps.push(LauncherItem::new(
                             name,
-                            exec,
+                            exec.clone(),
                             ItemType::App,
-                            Some("Windows Shortcut".to_string()),
+                            Some("Windows App".to_string()),
                             false,
-                            None,
+                            Some(exec),
                         ));
                     }
                 }

@@ -33,6 +33,7 @@ jobs:
 
       - name: Build Debian package
         run: |
+          VERSION=$(grep -m1 '^version =' Cargo.toml | cut -d '"' -f2)
           mkdir -p target/deb-pkg/usr/bin target/deb-pkg/usr/share/applications target/deb-pkg/usr/share/pixmaps target/deb-pkg/usr/share/icons/hicolor/scalable/apps target/deb-pkg/DEBIAN
           cp target/release/view-launcher target/deb-pkg/usr/bin/
           chmod 755 target/deb-pkg/usr/bin/view-launcher
@@ -40,9 +41,9 @@ jobs:
           cp assets/view-launcher.png target/deb-pkg/usr/share/pixmaps/
           cp assets/view-launcher.svg target/deb-pkg/usr/share/pixmaps/
           cp assets/view-launcher.svg target/deb-pkg/usr/share/icons/hicolor/scalable/apps/
-          cat << 'EOF' > target/deb-pkg/DEBIAN/control
+          cat << EOF > target/deb-pkg/DEBIAN/control
           Package: view-launcher
-          Version: 0.3.0
+          Version: ${VERSION}
           Section: utils
           Priority: optional
           Architecture: amd64
@@ -61,7 +62,7 @@ jobs:
           exit 0
           EOF
           chmod 755 target/deb-pkg/DEBIAN/postinst
-          dpkg-deb --build target/deb-pkg target/view-launcher_0.3.0_amd64.deb
+          dpkg-deb --build target/deb-pkg "target/view-launcher_${VERSION}_amd64.deb"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -69,7 +70,7 @@ jobs:
           name: linux-package
           path: |
             target/release/view-launcher
-            target/view-launcher_0.3.0_amd64.deb
+            target/view-launcher_*_amd64.deb
 
   test-windows:
     name: Test & Build (Windows)

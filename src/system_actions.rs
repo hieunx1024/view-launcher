@@ -57,6 +57,7 @@ pub fn execute_system_action(command: &str) {
     }
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
         let win_cmd = match command {
             "loginctl lock-session" => "rundll32.exe user32.dll,LockWorkStation",
             "systemctl reboot" => "shutdown /r /t 0",
@@ -65,8 +66,9 @@ pub fn execute_system_action(command: &str) {
             "loginctl terminate-session self" => "shutdown /l",
             _ => command,
         };
-        let _ = std::process::Command::new("cmd")
-            .args(&["/C", win_cmd])
-            .spawn();
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(&["/C", win_cmd]);
+        cmd.creation_flags(0x08000000);
+        let _ = cmd.spawn();
     }
 }
