@@ -24,12 +24,19 @@ export component AppWindow inherits Window {
     in property <bool> has_results: true;
     in property <string> mode_title: "APPLICATIONS";
     in property <bool> is_file_mode: false;
+    in property <bool> is_shell_mode: false;
     in property <string> mode_badge_text: "";
     in property <string> status_item_count: "0 apps";
 
     // Dynamic Morphing Spotlight Properties
     in-out property <bool> cfg_compact_empty: true;
     in-out property <bool> is_expanded: false;
+    // Pop-in appear animation: a plain fade in place (no position movement), set by
+    // Rust right before/after showing the window. See animate_window_pop_in() in
+    // main.rs. Kept to opacity only (no x/y animation) since animating position
+    // together with the panel's drop-shadow proved to be too heavy for rapid
+    // show/hide cycles and crashed the compositor.
+    in-out property <bool> is_pop_visible: false;
     property <bool> is_showing_list: (!root.cfg_compact_empty || root.search_text != "" || root.in_settings_mode || root.is_expanded);
 
     // Action Vector Icons
@@ -66,7 +73,8 @@ export component AppWindow inherits Window {
     property <color> col_input_text: root.is_dark ? #ffffff : #1f2328;
     property <color> col_selection_bg: root.is_dark ? #007aff : #0969da;
     property <color> col_item_hover: root.is_dark ? #2c2c2e80 : #f0f3f6;
-    property <color> col_item_selected_bg: root.is_dark ? #007aff : #0969da;
+    property <color> col_accent: root.is_dark ? #0a84ff : #0969da;
+    property <color> col_item_selected_bg: root.is_dark ? #0a84ff22 : #0969da1a;
     property <color> col_badge_bg: root.is_dark ? #2c2c2e : #e6e8ec;
     property <color> col_badge_text: root.is_dark ? #0a84ff : #0969da;
     property <color> col_separator: root.is_dark ? #333336 : #e1e4e8;
@@ -96,6 +104,10 @@ export component AppWindow inherits Window {
     callback tab_pressed();
     callback handle_backspace() -> bool;
     callback request_system_theme();
+    // "!" shell mode command recall (Up/Down), like a real shell's history.
+    callback shell_history_prev() -> string;
+    callback shell_history_next() -> string;
+    callback shell_history_reset();
 
     public function focus_search() {
         search_input.focus();
@@ -109,6 +121,14 @@ export component AppWindow inherits Window {
         settings_focus.focus();
     }
 
+    // Programmatically sets the search text (shell history recall, F1 help
+    // shortcut, ...) and re-runs the search, exactly as if the user had typed it.
+    function set_search_text_and_search(text: string) {
+        root.search_text = text;
+        root.is_expanded = (text != "");
+        root.search_text_changed(text);
+    }
+
     init => {
         search_input.focus();
     }
@@ -117,6 +137,8 @@ export component AppWindow inherits Window {
     main_card := Rectangle {
         x: 0px;
         y: 0px;
+        opacity: root.is_pop_visible ? 1.0 : 0.0;
+        animate opacity { duration: 160ms; easing: ease-out; }
         width: 100%;
         height: root.in_settings_mode ? 560px : (root.is_showing_list ? 520px : 56px);
         animate height { duration: 140ms; easing: ease-out; }
@@ -125,6 +147,9 @@ export component AppWindow inherits Window {
         border-width: 1px;
         border-color: root.col_border;
         animate border-color { duration: 150ms; easing: ease-out; }
+        drop-shadow-offset-y: 18px;
+        drop-shadow-blur: 42px;
+        drop-shadow-color: root.is_dark ? #00000070 : #00000030;
         clip: true;
 
         // =========================================================
@@ -205,11 +230,20 @@ export component AppWindow inherits Window {
                             horizontal-alignment: left;
 
                             edited => {
+                                // A real keystroke edit (as opposed to Up/Down history
+                                // recall, which sets root.search_text directly) means
+                                // the user has moved off whatever command was recalled.
+                                root.shell_history_reset();
                                 root.is_expanded = (self.text != "");
                                 root.search_text_changed(self.text);
                             }
 
                             key-pressed(event) => {
+                                if (event.text == Key.F1) {
+                                    root.set_search_text_and_search("?");
+                                    root.move_cursor_to_end();
+                                    return accept;
+                                }
                                 if (event.text == Key.Tab) {
                                     root.tab_pressed();
                                     root.move_cursor_to_end();
@@ -234,6 +268,11 @@ export component AppWindow inherits Window {
                                     return accept;
                                 }
                                 if (event.text == Key.DownArrow) {
+                                    if (root.is_shell_mode) {
+                                        root.set_search_text_and_search(root.shell_history_next());
+                                        root.move_cursor_to_end();
+                                        return accept;
+                                    }
                                     if (root.cfg_compact_empty && root.search_text == "" && !root.is_expanded) {
                                         root.is_expanded = true;
                                         return accept;
@@ -242,6 +281,11 @@ export component AppWindow inherits Window {
                                     return accept;
                                 }
                                 if (event.text == Key.UpArrow) {
+                                    if (root.is_shell_mode) {
+                                        root.set_search_text_and_search(root.shell_history_prev());
+                                        root.move_cursor_to_end();
+                                        return accept;
+                                    }
                                     if (root.cfg_compact_empty && root.search_text == "" && root.selected_index == 0 && root.is_expanded) {
                                         root.is_expanded = false;
                                         return accept;
@@ -413,8 +457,22 @@ export component AppWindow inherits Window {
                                 }
                             }
 
+                            // Selection indicator: a slim accent bar instead of a full
+                            // solid-color fill, so the row keeps its normal icon/text
+                            // colors and only the accent bar + soft tint mark it active.
+                            Rectangle {
+                                x: 0px;
+                                y: 6px;
+                                width: 3px;
+                                height: parent.height - 12px;
+                                border-radius: 1.5px;
+                                background: root.col_accent;
+                                opacity: (index == root.selected_index) ? 1 : 0;
+                                animate opacity { duration: 80ms; }
+                            }
+
                             HorizontalLayout {
-                                padding-left: 10px;
+                                padding-left: 14px;
                                 padding-right: 12px;
                                 padding-top: 0px;
                                 padding-bottom: 0px;
@@ -443,13 +501,13 @@ export component AppWindow inherits Window {
                                             width: 28px;
                                             height: 28px;
                                             border-radius: 6px;
-                                            background: (index == root.selected_index) ? #ffffff26 : root.col_badge_bg;
+                                            background: root.col_badge_bg;
 
                                             Text {
                                                 width: 100%;
                                                 height: 100%;
-                                                text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "/" : ((item.item_type == "clip") ? "≡" : ((item.item_type == "win") ? "□" : ((item.item_type == "sys") ? "⚙" : ((item.item_type == "theme") ? "◐" : "◆")))));
-                                                color: (index == root.selected_index) ? #ffffff : root.col_badge_text;
+                                                text: (item.item_type == "calc") ? "=" : ((item.item_type == "dir") ? "/" : ((item.item_type == "clip") ? "≡" : ((item.item_type == "win") ? "□" : ((item.item_type == "sys") ? "⚙" : ((item.item_type == "theme") ? "◐" : ((item.item_type == "shell") ? "❯" : ((item.item_type == "web") ? "↗" : "◆")))))));
+                                                color: root.col_badge_text;
                                                 font-size: 15px;
                                                 font-weight: 700;
                                                 horizontal-alignment: center;
@@ -462,7 +520,7 @@ export component AppWindow inherits Window {
                                 // Item Name Title (Razor-sharp high contrast text)
                                 Text {
                                     text: item.name;
-                                    color: (index == root.selected_index) ? #ffffff : root.col_text_primary;
+                                    color: root.col_text_primary;
                                     font-weight: (index == root.selected_index) ? 600 : 500;
                                     font-size: 15px;
                                     horizontal-stretch: 1;
@@ -475,7 +533,7 @@ export component AppWindow inherits Window {
                                     alignment: end;
                                     Text {
                                         text: item.category;
-                                        color: (index == root.selected_index) ? #ffffffcc : root.col_text_muted;
+                                        color: (index == root.selected_index) ? root.col_accent : root.col_text_muted;
                                         font-size: 12px;
                                         font-weight: 500;
                                         vertical-alignment: center;
@@ -526,7 +584,7 @@ export component AppWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: (footer.sel_type == "calc" || footer.sel_type == "clip") ? "Copy" : ((footer.sel_type == "win") ? "Switch" : ((footer.sel_type == "sys" || footer.sel_type == "theme") ? "Apply" : "Open"));
+                                text: (footer.sel_type == "calc" || footer.sel_type == "clip") ? "Copy" : ((footer.sel_type == "win") ? "Switch" : ((footer.sel_type == "sys" || footer.sel_type == "theme") ? "Apply" : ((footer.sel_type == "shell") ? "Run" : "Open")));
                                 color: root.col_kbd_text;
                                 font-size: 11px;
                                 font-weight: 500;

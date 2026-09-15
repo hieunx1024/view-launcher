@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::rc::Rc;
+use std::cell::Cell;
 
 use slint::ComponentHandle;
 use view_launcher::config::Config;
@@ -93,6 +95,7 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
                                     ui.set_is_expanded(false);
                                     let _ = ui.show();
                                     ui.invoke_focus_search();
+                                    animate_window_pop_in(ui_weak.clone());
                                 }
                             }
                         }
@@ -140,6 +143,7 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
                                     ui.set_is_expanded(false);
                                     let _ = ui.show();
                                     ui.invoke_focus_search();
+                                    animate_window_pop_in(ui_weak.clone());
                                 }
                             }
                         }
@@ -162,6 +166,8 @@ fn populate_items(
     let is_clip_mode = trimmed.starts_with("@c") || trimmed.starts_with("@clip");
     let is_sys_mode = trimmed.starts_with("@sys") || trimmed.starts_with("@power");
     let is_theme_mode = trimmed.starts_with("@theme") || trimmed.starts_with("@mode") || trimmed.starts_with("@opacity");
+    let is_shell_mode = trimmed.starts_with('!');
+    let is_help_mode = trimmed == "?";
 
     let mode_badge = if is_file_mode {
         "Files"
@@ -173,11 +179,16 @@ fn populate_items(
         "System"
     } else if is_theme_mode {
         "Theme"
+    } else if is_shell_mode {
+        "Shell"
+    } else if is_help_mode {
+        "Help"
     } else {
         ""
     };
     ui.set_mode_badge_text(mode_badge.into());
     ui.set_is_file_mode(is_file_mode);
+    ui.set_is_shell_mode(is_shell_mode);
 
     let results = engine.search(query);
     let count = results.len();
@@ -193,6 +204,10 @@ fn populate_items(
         ("SYSTEM", "actions")
     } else if is_theme_mode {
         ("THEME & OPACITY", "options")
+    } else if is_shell_mode {
+        ("RUN COMMAND", "command")
+    } else if is_help_mode {
+        ("KEYBOARD SHORTCUTS", "shortcuts")
     } else {
         ("APPLICATIONS", "apps")
     };
@@ -212,13 +227,17 @@ fn populate_items(
         trimmed
     };
 
-    let is_dir_view = if let Some((dir, filter)) = engine.resolve_path_search(file_query) {
-        filter.is_empty() && dir.is_dir()
-    } else {
-        false
-    };
-
     if count == 0 {
+        // Only resolve the path (an extra dirs::home_dir() + stat call) when there
+        // are actually no results to show - `engine.search()` already did the
+        // equivalent resolution internally to produce those (or zero) results, so
+        // doing it again here unconditionally on every keystroke was pure waste on
+        // the common "there are results" path.
+        let is_dir_view = if let Some((dir, filter)) = engine.resolve_path_search(file_query) {
+            filter.is_empty() && dir.is_dir()
+        } else {
+            false
+        };
         if is_dir_view {
             ui.set_empty_state_title("Folder is empty".into());
             ui.set_empty_state_subtitle("Press Backspace to go back to parent folder".into());
@@ -230,6 +249,10 @@ fn populate_items(
         } else if is_clip_mode {
             ui.set_empty_state_title("Clipboard is empty".into());
             ui.set_empty_state_subtitle("Copy some text to see it appear in clipboard history".into());
+            ui.set_is_empty_folder(false);
+        } else if is_shell_mode {
+            ui.set_empty_state_title("Type a command to run".into());
+            ui.set_empty_state_subtitle("e.g. ! ls -la   or   ! echo hello | wc -l".into());
             ui.set_is_empty_folder(false);
         } else if !trimmed.is_empty() {
             ui.set_empty_state_title(format!("No results for '{}'", trimmed).into());
@@ -263,7 +286,7 @@ fn populate_items(
                 (icon, size_str)
             }
             launcher::ItemType::Calc => {
-                (None, "Calc".to_string())
+                (None, item.description.clone().unwrap_or_else(|| "Calc".to_string()))
             }
             launcher::ItemType::Window => {
                 let icon = icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
@@ -281,6 +304,12 @@ fn populate_items(
             launcher::ItemType::Dmenu => {
                 (None, "".to_string())
             }
+            launcher::ItemType::Shell => {
+                (None, "Run".to_string())
+            }
+            launcher::ItemType::WebSearch => {
+                (None, "Web".to_string())
+            }
         };
 
         let has_icon = slint_icon.is_some();
@@ -296,6 +325,8 @@ fn populate_items(
             launcher::ItemType::System => "sys",
             launcher::ItemType::Theme => "theme",
             launcher::ItemType::Dmenu => "dmenu",
+            launcher::ItemType::Shell => "shell",
+            launcher::ItemType::WebSearch => "web",
         };
 
         slint_items.push(LauncherItemData {
@@ -349,6 +380,24 @@ fn ensure_selection_visible(ui: &AppWindow, selected_index: i32) {
     }
 }
 
+/// Warms the icon cache a few items at a time via `slint::Timer::single_shot`,
+/// re-scheduling itself until the whole list is done. Runs entirely on the
+/// event-loop thread, so it keeps the window responsive between chunks instead
+/// of resolving every icon in one blocking call at startup.
+#[cfg(target_os = "windows")]
+fn warm_icon_cache_chunked(icon_resolver: Arc<IconResolver>, apps: Vec<LauncherItem>, start: usize) {
+    const CHUNK_SIZE: usize = 20;
+    let end = (start + CHUNK_SIZE).min(apps.len());
+    for app in &apps[start..end] {
+        let _ = icon_resolver.resolve_icon(app.icon.as_deref(), &app.name, &app.exec_or_path);
+    }
+    if end < apps.len() {
+        slint::Timer::single_shot(std::time::Duration::from_millis(1), move || {
+            warm_icon_cache_chunked(icon_resolver, apps, end);
+        });
+    }
+}
+
 fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "windows")]
     {
@@ -366,6 +415,7 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    init_platform_with_app_id("view-launcher")?;
     let ui = AppWindow::new()?;
     ui.set_mode_title(prompt.to_string().into());
     ui.set_mode_badge_text("dmenu".into());
@@ -509,6 +559,47 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Explicitly selects the winit platform backend (mirroring the same `SLINT_BACKEND`
+/// handling Slint's own default backend selector does for the "winit" case) and sets
+/// the XDG app id, so it takes effect on the window about to be created.
+///
+/// This can't be done by just calling `slint::set_xdg_app_id()` right after
+/// `AppWindow::new()`: Slint's winit backend creates the real native window (and
+/// sends its Wayland app_id / X11 WM_CLASS) *eagerly*, as part of constructing the
+/// window adapter, which happens inside `AppWindow::new()` itself - by the time that
+/// call returns, the window already exists without an app_id, and there's no way to
+/// change it afterwards. `set_xdg_app_id()` also requires the platform to already be
+/// selected (it errors otherwise), so the backend has to be initialized manually here
+/// rather than relying on Slint's normal lazy auto-selection on first window creation.
+fn init_platform_with_app_id(app_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let backend_config = std::env::var("SLINT_BACKEND").unwrap_or_default().to_lowercase();
+    let renderer_name = backend_config.split_once('-').map(|(_, renderer)| renderer).filter(|r| !r.is_empty());
+    let backend = i_slint_backend_winit::Backend::new_with_renderer_by_name(renderer_name)?;
+    slint::platform::set_platform(Box::new(backend))
+        .map_err(|e| format!("failed to set slint platform: {e}"))?;
+    slint::set_xdg_app_id(app_id)?;
+    Ok(())
+}
+
+/// Plays the "pop in" appear animation: a plain fade-in-place (no position
+/// movement - animating position together with the panel's drop-shadow proved too
+/// heavy for rapid show/hide cycles and crashed the compositor). Puts the window
+/// at opacity 0, then (after a short delay so at least one frame actually renders
+/// that state - a 1ms delay isn't enough, since the compositor's first post-show
+/// frame can take longer than that to reach the screen) flips it to opacity 1, so
+/// `main_card`'s `animate`d `opacity` in app_window.slint eases it in instead of
+/// it just snapping into view. Must be called on the UI/event-loop thread.
+fn animate_window_pop_in(ui_weak: slint::Weak<AppWindow>) {
+    if let Some(ui) = ui_weak.upgrade() {
+        ui.set_is_pop_visible(false);
+    }
+    slint::Timer::single_shot(std::time::Duration::from_millis(32), move || {
+        if let Some(ui) = ui_weak.upgrade() {
+            ui.set_is_pop_visible(true);
+        }
+    });
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "windows")]
     {
@@ -575,6 +666,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let exit_trigger = Arc::new(AtomicBool::new(false));
+
+    // Identify this window to the compositor/WM as "view-launcher" so Wayland
+    // (app_id) and X11 (WM_CLASS) window managers can match it to the installed
+    // .desktop entry (assets/view-launcher.desktop: Icon=view-launcher,
+    // StartupWMClass=view-launcher) and show the real app icon in the dock/
+    // taskbar instead of falling back to a generic one. Must run before the
+    // window is created (see init_platform_with_app_id's doc comment).
+    init_platform_with_app_id("view-launcher")?;
 
     // 1. Create main Slint Window for primary resident daemon
     let ui = AppWindow::new()?;
@@ -678,7 +777,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "",
     )));
 
-    // Preload icons on startup (takes <15ms with O(1) index)
+    // Preload icons on startup. On Linux this is a fast O(1) index lookup, but on
+    // Windows each icon requires a synchronous SHGetFileInfoW/PrivateExtractIconsW
+    // shell call (which internally resolves .lnk targets via COM), so warming the
+    // whole Start Menu in one blocking call can noticeably delay the window becoming
+    // interactive on machines with a large Start Menu. `slint::Image` is not
+    // Send/Sync, so this can't be offloaded to a background thread without either
+    // moving Image across threads (unsound) or re-deriving pixel data on that thread
+    // and initializing COM on it (fragile, unverifiable without a Windows machine).
+    // Instead, warm the cache in small chunks via the event loop's own timer so the
+    // window can paint and respond to input between chunks, rather than blocking
+    // startup on the full list.
+    #[cfg(target_os = "windows")]
+    warm_icon_cache_chunked(icon_resolver.clone(), engine.apps.clone(), 0);
+    #[cfg(not(target_os = "windows"))]
     icon_resolver.preload_icons(&engine.apps);
 
     // 5. Connect Search Text Changed
@@ -697,6 +809,60 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ui.set_selected_index(0);
                 ui.set_scroll_viewport_y(0.0);
             }
+        });
+    }
+
+    // 5.0 Shell ("!") command history recall — Up/Down cycle through past commands,
+    // like a real shell. `shell_history_cursor` is -1 when not currently browsing
+    // (i.e. sitting on the live, possibly-edited command line); otherwise it's an
+    // index into `engine.history`'s ordered shell command log.
+    let shell_history_cursor: Rc<Cell<i64>> = Rc::new(Cell::new(-1));
+    {
+        let engine = engine.clone();
+        let cursor = shell_history_cursor.clone();
+        ui.on_shell_history_prev(move || -> slint::SharedString {
+            let history = match engine.history.read() {
+                Ok(h) => h,
+                Err(_) => return "!".into(),
+            };
+            let commands = history.shell_commands();
+            if commands.is_empty() {
+                return "!".into();
+            }
+            let idx = if cursor.get() < 0 {
+                commands.len() as i64 - 1
+            } else {
+                (cursor.get() - 1).max(0)
+            };
+            cursor.set(idx);
+            format!("!{}", commands[idx as usize]).into()
+        });
+    }
+    {
+        let engine = engine.clone();
+        let cursor = shell_history_cursor.clone();
+        ui.on_shell_history_next(move || -> slint::SharedString {
+            if cursor.get() < 0 {
+                return "!".into();
+            }
+            let history = match engine.history.read() {
+                Ok(h) => h,
+                Err(_) => return "!".into(),
+            };
+            let commands = history.shell_commands();
+            let idx = cursor.get() + 1;
+            if idx as usize >= commands.len() {
+                cursor.set(-1);
+                return "!".into();
+            }
+            cursor.set(idx);
+            format!("!{}", commands[idx as usize]).into()
+        });
+    }
+    {
+        let cursor = shell_history_cursor.clone();
+        ui.on_shell_history_reset(move || {
+            cursor.set(-1);
         });
     }
 
@@ -1075,6 +1241,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 11. Run Slint Event Loop
+    // The window is first shown as part of `run()` itself (cold start becoming the
+    // daemon); schedule the same pop-in transition for that initial appearance too.
+    animate_window_pop_in(ui.as_weak());
     ui.run()?;
 
     // Cleanup socket on exit

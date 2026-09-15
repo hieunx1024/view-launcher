@@ -191,9 +191,18 @@ pub struct SearchConfig {
     pub ignored_dirs: Vec<String>,
     #[serde(default)]
     pub ignored_extensions: Vec<String>,
+    /// URL template for the "Search the web" fallback result; `{query}` is replaced
+    /// with the (percent-encoded) search text. Change this to use a different search
+    /// engine, e.g. "https://duckduckgo.com/?q={query}".
+    #[serde(default = "default_web_search_url")]
+    pub web_search_url: String,
 }
 
 fn default_max_results() -> usize { 50 }
+
+fn default_web_search_url() -> String {
+    "https://www.google.com/search?q={query}".to_string()
+}
 
 impl Default for SearchConfig {
     fn default() -> Self {
@@ -204,6 +213,7 @@ impl Default for SearchConfig {
             enable_path_matching: Some(true),
             ignored_dirs: Vec::new(),
             ignored_extensions: Vec::new(),
+            web_search_url: default_web_search_url(),
         }
     }
 }

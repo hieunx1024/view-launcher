@@ -14,7 +14,14 @@ pub struct HistoryEntry {
 pub struct HistoryData {
     #[serde(default)]
     pub entries: HashMap<String, HistoryEntry>,
+    /// Raw shell commands run via the "!" launcher mode, oldest first, capped at
+    /// `SHELL_HISTORY_CAP` entries. Separate from `entries` because it's an ordered
+    /// recall log (like a real shell's history), not a ranking-boost table.
+    #[serde(default)]
+    pub shell_commands: Vec<String>,
 }
+
+const SHELL_HISTORY_CAP: usize = 200;
 
 #[derive(Debug)]
 pub struct HistoryManager {
@@ -23,6 +30,14 @@ pub struct HistoryManager {
 }
 
 impl HistoryManager {
+    /// An in-memory-only manager with no backing file (`save()` becomes a no-op since
+    /// it already guards on `cache_path.is_some()`). Used by tests so they don't write
+    /// throwaway data into the real `~/.cache/view-launcher/history.toml`.
+    #[cfg(test)]
+    pub fn in_memory() -> Self {
+        Self { data: HistoryData::default(), cache_path: None }
+    }
+
     pub fn load() -> Self {
         let cache_path = Self::get_cache_path();
         let mut data = HistoryData::default();
@@ -60,6 +75,29 @@ impl HistoryManager {
                 p
             })
         }
+    }
+
+    /// Appends a command run via the "!" shell mode to the recall history (skipping
+    /// immediate repeats, like most shells' `HISTCONTROL=ignoredups`), trimming the
+    /// oldest entries once `SHELL_HISTORY_CAP` is exceeded.
+    pub fn record_shell_command(&mut self, command: &str) {
+        if command.trim().is_empty() {
+            return;
+        }
+        if self.data.shell_commands.last().map(|s| s.as_str()) == Some(command) {
+            return;
+        }
+        self.data.shell_commands.push(command.to_string());
+        let len = self.data.shell_commands.len();
+        if len > SHELL_HISTORY_CAP {
+            self.data.shell_commands.drain(0..len - SHELL_HISTORY_CAP);
+        }
+        self.save();
+    }
+
+    /// Oldest-first list of past "!" shell commands, for Up/Down recall.
+    pub fn shell_commands(&self) -> &[String] {
+        &self.data.shell_commands
     }
 
     pub fn record_launch(&mut self, key: &str) {
@@ -117,5 +155,44 @@ impl HistoryManager {
                 let _ = fs::write(path, content);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shell_command_history_order_and_dedup() {
+        let mut h = HistoryManager::in_memory();
+        assert!(h.shell_commands().is_empty());
+
+        h.record_shell_command("ls -la");
+        h.record_shell_command("echo hi");
+        // Immediate repeat of the last command is ignored (like ignoredups).
+        h.record_shell_command("echo hi");
+        h.record_shell_command("git status");
+
+        assert_eq!(h.shell_commands(), &["ls -la", "echo hi", "git status"]);
+    }
+
+    #[test]
+    fn test_shell_command_history_ignores_blank() {
+        let mut h = HistoryManager::in_memory();
+        h.record_shell_command("");
+        h.record_shell_command("   ");
+        assert!(h.shell_commands().is_empty());
+    }
+
+    #[test]
+    fn test_shell_command_history_caps_length() {
+        let mut h = HistoryManager::in_memory();
+        for i in 0..(SHELL_HISTORY_CAP + 10) {
+            h.record_shell_command(&format!("cmd{i}"));
+        }
+        assert_eq!(h.shell_commands().len(), SHELL_HISTORY_CAP);
+        // Oldest entries were trimmed; the most recent one is still there.
+        assert_eq!(h.shell_commands().last().unwrap(), &format!("cmd{}", SHELL_HISTORY_CAP + 9));
+        assert!(!h.shell_commands().contains(&"cmd0".to_string()));
     }
 }

@@ -30,6 +30,8 @@ pub enum ItemType {
     Clipboard,
     Dmenu,
     Theme,
+    Shell,
+    WebSearch,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +68,8 @@ impl LauncherItem {
     pub fn get_category_tag(&self) -> &'static str {
         match self.item_type {
             ItemType::Theme => "Theme",
+            ItemType::Shell => "Shell",
+            ItemType::WebSearch => "Web Search",
             ItemType::Calc => "Calc",
             ItemType::Dir => "Folder",
             ItemType::File => "File",
@@ -637,6 +641,65 @@ impl LauncherEngine {
         let history_guard = self.history.read().unwrap_or_else(|e| e.into_inner());
 
         let mut results = Vec::new();
+
+        // 0. Shell Command Mode (! <command>): run an arbitrary shell command in a
+        // terminal, e.g. "!ls -la" or "! echo hello | wc -l".
+        if trimmed_query.starts_with('!') {
+            let cmd = trimmed_query[1..].trim_start();
+            if !cmd.is_empty() {
+                results.push((
+                    LauncherItem::new(
+                        cmd.to_string(),
+                        cmd.to_string(),
+                        ItemType::Shell,
+                        Some("Press Enter to run in terminal".to_string()),
+                        true,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
+            }
+            return results;
+        }
+
+        // 0.5 Help ("?"): lists every keyboard shortcut and search mode as plain
+        // informational rows (same rendering as the "@" mode index below).
+        if trimmed_query == "?" {
+            let shortcuts: &[(&str, &str)] = &[
+                ("Ctrl+Alt+Space", "Toggle the launcher window (global shortcut)"),
+                ("Enter", "Open / run / copy the selected result"),
+                ("Up / Down", "Navigate results (or recall past \"!\" commands in shell mode)"),
+                ("Tab", "Enter the selected folder (file search mode)"),
+                ("Backspace", "Delete character; at root, go to parent folder"),
+                ("Alt+T", "Open the selected item's folder in a terminal"),
+                ("Alt+C", "Copy file path or result to clipboard"),
+                ("Ctrl+,", "Open preferences"),
+                ("Esc", "Close preferences, or hide the launcher"),
+                ("@f <query>", "Search files and folders"),
+                ("@w <query>", "Switch between open windows"),
+                ("@c <query>", "Browse clipboard history"),
+                ("@sys", "Lock, sleep, restart, shutdown"),
+                ("@theme", "Switch theme mode / opacity"),
+                ("@emoji or :name", "Search emoji (English or Vietnamese)"),
+                ("! <command>", "Run a shell command in a terminal"),
+                ("5 * 12, 0xFF, ...", "Inline calculator (also unit/currency conversion)"),
+                ("anything else", "Search apps; falls back to a web search"),
+            ];
+            for (keys, desc) in shortcuts {
+                results.push((
+                    LauncherItem::new(
+                        keys.to_string(),
+                        keys.to_string(),
+                        ItemType::Calc,
+                        Some(desc.to_string()),
+                        false,
+                        None,
+                    ),
+                    Vec::new(),
+                ));
+            }
+            return results;
+        }
 
         // 1. Window Switcher Mode (@w or @win)
         let is_win_mode = trimmed_query.starts_with("@w ") || trimmed_query.starts_with("@win ")
@@ -1213,12 +1276,16 @@ impl LauncherEngine {
 
         // 4. Khi chưa gõ: Hiển thị ứng dụng đã ghim (Pinned) -> Ứng dụng tùy biến -> Ứng dụng hệ thống
         if trimmed_query.is_empty() {
-            let mut default_apps = Vec::new();
+            // Dedup by name with a HashSet instead of re-scanning the (growing)
+            // result vec with `.any()` for every candidate - O(n) instead of O(n^2),
+            // which matters once the app catalog reaches a few hundred entries.
+            let mut default_apps = Vec::with_capacity(self.pinned_apps.len() + self.custom_apps.len() + self.apps.len());
+            let mut seen_names: std::collections::HashSet<&str> = std::collections::HashSet::new();
 
             // Pinned apps first
             for pinned in &self.pinned_apps {
                 if let Some(app) = self.apps.iter().chain(self.custom_apps.iter()).find(|a| a.name.eq_ignore_ascii_case(pinned)) {
-                    if !default_apps.iter().any(|(item, _): &(LauncherItem, _)| item.name == app.name) {
+                    if seen_names.insert(app.name.as_str()) {
                         default_apps.push((app.clone(), Vec::new()));
                     }
                 }
@@ -1226,14 +1293,14 @@ impl LauncherEngine {
 
             // Custom apps next
             for custom in &self.custom_apps {
-                if !default_apps.iter().any(|(item, _): &(LauncherItem, _)| item.name == custom.name) {
+                if seen_names.insert(custom.name.as_str()) {
                     default_apps.push((custom.clone(), Vec::new()));
                 }
             }
 
             // Standard apps
             for app in &self.apps {
-                if !default_apps.iter().any(|(item, _): &(LauncherItem, _)| item.name == app.name) {
+                if seen_names.insert(app.name.as_str()) {
                     default_apps.push((app.clone(), Vec::new()));
                 }
             }
@@ -1277,6 +1344,23 @@ impl LauncherEngine {
 
         for (item_with_indices, _) in custom_matches {
             results.push(item_with_indices);
+        }
+
+        // 9. Web Search Fallback: always offered as a last-resort action for
+        // whatever was typed, appended at the end so it never outranks a real match.
+        if !trimmed_query.is_empty() {
+            let url = self.config.search.web_search_url.replace("{query}", &url_encode_query(trimmed_query));
+            results.push((
+                LauncherItem::new(
+                    format!("Search the web for \"{}\"", trimmed_query),
+                    url,
+                    ItemType::WebSearch,
+                    Some("Opens in your default browser".to_string()),
+                    false,
+                    None,
+                ),
+                Vec::new(),
+            ));
         }
 
         results
@@ -1361,6 +1445,14 @@ impl LauncherEngine {
             std::process::exit(0);
         }
 
+        if item.item_type == ItemType::Shell {
+            if let Ok(mut h) = self.history.write() {
+                h.record_shell_command(&item.exec_or_path);
+            }
+            run_shell_command_in_terminal(&item.exec_or_path);
+            return;
+        }
+
         // Record history
         let key = if item.item_type == ItemType::App { &item.name } else { &item.exec_or_path };
         if let Ok(mut h) = self.history.write() {
@@ -1377,7 +1469,7 @@ impl LauncherEngine {
                     if item.terminal {
                         let term = find_terminal_emulator();
                         let mut cmd = Command::new(&term);
-                        cmd.arg("-e").args(&tokens);
+                        cmd.arg(terminal_exec_flag(&term)).args(&tokens);
                         unsafe {
                             cmd.stdout(std::process::Stdio::null())
                                 .stderr(std::process::Stdio::null())
@@ -1407,7 +1499,7 @@ impl LauncherEngine {
                         }
                     }
                 }
-                ItemType::File | ItemType::Dir => {
+                ItemType::File | ItemType::Dir | ItemType::WebSearch => {
                     unsafe {
                         Command::new("xdg-open")
                             .arg(&item.exec_or_path)
@@ -1422,7 +1514,7 @@ impl LauncherEngine {
                             .ok();
                     }
                 }
-                ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu | ItemType::Theme => {}
+                ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu | ItemType::Theme | ItemType::Shell => {}
             }
         }
 
@@ -1447,7 +1539,7 @@ impl LauncherEngine {
         let dir = match item.item_type {
             ItemType::Dir => PathBuf::from(&item.exec_or_path),
             ItemType::File => Path::new(&item.exec_or_path).parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from(".")),
-            ItemType::App | ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu | ItemType::Theme => return,
+            ItemType::App | ItemType::Calc | ItemType::Clipboard | ItemType::Window | ItemType::System | ItemType::Dmenu | ItemType::Theme | ItemType::Shell | ItemType::WebSearch => return,
         };
 
         #[cfg(not(target_os = "windows"))]
@@ -1546,6 +1638,54 @@ fn expand_tilde(path_str: &str) -> String {
     path_str.to_string()
 }
 
+/// Most terminal emulators (xterm, kitty, alacritty, foot, konsole, wezterm, ghostty,
+/// xfce4-terminal) run a command via `-e prog arg1 arg2 ...` as separate argv entries.
+/// gnome-terminal deprecated that form: passing more than one token after `-e` now
+/// fails with "Unknown option", and it asks for `-- prog arg1 arg2 ...` instead.
+#[cfg(not(target_os = "windows"))]
+fn terminal_exec_flag(term: &str) -> &'static str {
+    if term.contains("gnome-terminal") { "--" } else { "-e" }
+}
+
+/// Runs an arbitrary shell command line in a terminal, via `sh -c` (Linux) or
+/// `cmd /K` (Windows) so the user's command supports pipes, redirects, `&&`, etc.
+/// The terminal is left open after the command finishes so output/errors stay visible.
+fn run_shell_command_in_terminal(command: &str) {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let term = find_terminal_emulator();
+        let wrapped = format!(
+            "{}; printf '\\n[Done. Press Enter to close]'; read _",
+            command
+        );
+        unsafe {
+            Command::new(&term)
+                .arg(terminal_exec_flag(&term))
+                .arg("sh")
+                .arg("-c")
+                .arg(&wrapped)
+                .pre_exec(|| {
+                    setsid();
+                    Ok(())
+                })
+                .spawn()
+                .ok();
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        #[cfg(windows)]
+        use std::os::windows::process::CommandExt;
+        #[allow(unused_mut)]
+        let mut cmd = Command::new("cmd");
+        cmd.args(&["/C", "start", "cmd", "/K", command]);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW (applies to the outer `start` launcher only)
+        let _ = cmd.spawn();
+    }
+}
+
 #[cfg(not(target_os = "windows"))]
 fn find_terminal_emulator() -> String {
     if let Ok(term) = std::env::var("TERMINAL") {
@@ -1589,6 +1729,24 @@ fn which_binary(name: &str) -> bool {
 }
 
 /// Helper function to strip Vietnamese accents and convert to lowercase for accent-insensitive search.
+/// Minimal percent-encoding for a URL query component (RFC 3986 "unreserved" set
+/// passed through as-is, everything else percent-encoded byte-by-byte, so UTF-8
+/// text like Vietnamese input is encoded correctly). No external crate needed for
+/// something this small.
+fn url_encode_query(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 3);
+    for &byte in input.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char);
+            }
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    out
+}
+
 pub fn remove_vietnamese_accents(s: &str) -> String {
     s.chars().map(|c| {
         match c {
@@ -1711,6 +1869,73 @@ mod tests {
 
         let results = engine.search(&format!("@f {}/", current_dir_str));
         assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_web_search_fallback() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+
+        // A normal query always gets a trailing "search the web" item, appended
+        // after any real matches so it never outranks them.
+        let results = engine.search("firefox");
+        let last = results.last().expect("expected at least the web-search item");
+        assert_eq!(last.0.item_type, ItemType::WebSearch);
+        assert!(last.0.exec_or_path.starts_with("https://www.google.com/search?q="));
+
+        // Query text is percent-encoded into the URL (spaces -> '+', not raw).
+        let results = engine.search("rust async runtime");
+        let last = &results.last().unwrap().0;
+        assert_eq!(last.exec_or_path, "https://www.google.com/search?q=rust+async+runtime");
+
+        // Empty query: no web-search item (nothing meaningful to search for).
+        let empty_results = engine.search("");
+        assert!(empty_results.iter().all(|(item, _)| item.item_type != ItemType::WebSearch));
+
+        // Prefixed modes (e.g. "!") are dedicated modes and return before the
+        // fallback is ever considered.
+        let shell_results = engine.search("!ls");
+        assert!(shell_results.iter().all(|(item, _)| item.item_type != ItemType::WebSearch));
+    }
+
+    #[test]
+    fn test_help_mode() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+
+        let results = engine.search("?");
+        assert!(!results.is_empty());
+        assert!(results.iter().all(|(item, _)| item.item_type == ItemType::Calc));
+        // The global toggle shortcut and the new "!" shell mode should both be
+        // documented in the list.
+        assert!(results.iter().any(|(item, _)| item.name == "Ctrl+Alt+Space"));
+        assert!(results.iter().any(|(item, _)| item.name == "! <command>"));
+
+        // "?" is an exact match only; a question mark elsewhere is just a query.
+        let not_help = engine.search("what is 5?");
+        assert!(not_help.iter().all(|(item, _)| item.name != "Ctrl+Alt+Space"));
+    }
+
+    #[test]
+    fn test_shell_command_mode() {
+        let config = Config::default();
+        let engine = LauncherEngine::new(config);
+
+        // Bare "!" with nothing typed yet: no result, just waiting for input.
+        let empty_results = engine.search("!");
+        assert!(empty_results.is_empty());
+
+        // "!<command>" produces exactly one Shell item carrying the raw command.
+        let results = engine.search("!echo hello | wc -l");
+        assert_eq!(results.len(), 1);
+        let (item, _) = &results[0];
+        assert_eq!(item.item_type, ItemType::Shell);
+        assert_eq!(item.exec_or_path, "echo hello | wc -l");
+
+        // A leading space after "!" is tolerated ("! ls" behaves like "!ls").
+        let spaced_results = engine.search("! ls -la");
+        assert_eq!(spaced_results.len(), 1);
+        assert_eq!(spaced_results[0].0.exec_or_path, "ls -la");
     }
 
     #[test]
