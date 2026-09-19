@@ -169,7 +169,30 @@ fn populate_items(
     let is_shell_mode = trimmed.starts_with('!');
     let is_help_mode = trimmed == "?";
 
-    let mode_badge = if is_file_mode {
+    // Content typed after the mode trigger itself (e.g. the path after "@f ",
+    // the command after "!"). Once there's real content, hide the mode badge
+    // so it stops eating into the width available to show that content -
+    // long file paths / shell commands would otherwise get cut off under it.
+    let mode_content = if is_file_mode {
+        trimmed.strip_prefix("@file").or_else(|| trimmed.strip_prefix("@f"))
+    } else if is_win_mode {
+        trimmed.strip_prefix("@win").or_else(|| trimmed.strip_prefix("@w"))
+    } else if is_clip_mode {
+        trimmed.strip_prefix("@clip").or_else(|| trimmed.strip_prefix("@c"))
+    } else if is_sys_mode {
+        trimmed.strip_prefix("@power").or_else(|| trimmed.strip_prefix("@sys"))
+    } else if is_theme_mode {
+        trimmed.strip_prefix("@theme").or_else(|| trimmed.strip_prefix("@mode")).or_else(|| trimmed.strip_prefix("@opacity"))
+    } else if is_shell_mode {
+        trimmed.strip_prefix('!')
+    } else {
+        None
+    };
+    let has_mode_content = mode_content.map_or(false, |rest| !rest.trim().is_empty());
+
+    let mode_badge = if has_mode_content {
+        ""
+    } else if is_file_mode {
         "Files"
     } else if is_win_mode {
         "Windows"
