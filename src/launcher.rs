@@ -235,6 +235,13 @@ impl LauncherEngine {
             }
         }
 
+        // Desktop-file ids (basename, per the XDG spec) already indexed, so the same
+        // app shipped in multiple XDG_DATA_DIRS is only added once. Distinct apps that
+        // merely share a display Name (e.g. Ubuntu 26 ships a new default terminal
+        // whose .desktop Name is also just "Terminal", alongside another terminal
+        // emulator's .desktop file) must NOT be collapsed, so dedup can't key on `Name`.
+        let mut seen_ids: std::collections::HashSet<std::ffi::OsString> = std::collections::HashSet::new();
+
         for path in paths {
             if !path.exists() {
                 continue;
@@ -243,13 +250,24 @@ impl LauncherEngine {
                 for entry in entries.flatten() {
                     let file_path = entry.path();
                     if file_path.extension().map_or(false, |ext| ext == "desktop") {
+                        let id = file_path.file_name().map(|f| f.to_os_string());
+                        if let Some(id) = &id {
+                            if seen_ids.contains(id) {
+                                continue;
+                            }
+                        }
+
                         if let Some(app) = self.parse_desktop_file(&file_path) {
                             // Check if app is in hidden list
                             let is_hidden = self.hidden_apps.iter().any(|h| {
                                 app.name.eq_ignore_ascii_case(h) || app.exec_or_path.contains(h)
                             });
 
-                            if !is_hidden && !self.apps.iter().any(|item| item.name == app.name) {
+                            if let Some(id) = id {
+                                seen_ids.insert(id);
+                            }
+
+                            if !is_hidden {
                                 self.apps.push(app);
                             }
                         }
