@@ -195,22 +195,38 @@ impl LauncherEngine {
     /// Indexes all standard Linux .desktop application entries + extra paths from config.
     #[cfg(not(target_os = "windows"))]
     fn index_apps(&mut self) {
-        let mut paths = vec![
-            PathBuf::from("/usr/share/applications"),
-            PathBuf::from("/usr/local/share/applications"),
-            PathBuf::from("/var/lib/snapd/desktop/applications"),
-            PathBuf::from("/var/lib/flatpak/exports/share/applications"),
-            dirs::home_dir().map(|mut h| {
-                h.push(".local/share/applications");
-                h
-            }).unwrap_or_default(),
-            dirs::home_dir().map(|mut h| {
-                h.push(".local/share/flatpak/exports/share/applications");
-                h
-            }).unwrap_or_default(),
-        ];
+        let mut paths = Vec::new();
 
-        // Parse standard $XDG_DATA_DIRS (e.g. Ubuntu snap / flatpak / desktop entries)
+        // 1. Extra desktop paths from config (highest priority)
+        for extra in &self.config.apps.extra_desktop_paths {
+            let expanded = expand_tilde(extra);
+            let p = PathBuf::from(expanded);
+            if !paths.contains(&p) {
+                paths.push(p);
+            }
+        }
+
+        // 2. User applications directory ($XDG_DATA_HOME/applications or ~/.local/share/applications)
+        let data_home = std::env::var("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .ok()
+            .or_else(|| dirs::home_dir().map(|h| h.join(".local/share")));
+        if let Some(user_data) = data_home {
+            let user_apps = user_data.join("applications");
+            if !paths.contains(&user_apps) {
+                paths.push(user_apps);
+            }
+        }
+
+        // 3. User flatpak exports
+        if let Some(home) = dirs::home_dir() {
+            let flatpak_user = home.join(".local/share/flatpak/exports/share/applications");
+            if !paths.contains(&flatpak_user) {
+                paths.push(flatpak_user);
+            }
+        }
+
+        // 4. Standard $XDG_DATA_DIRS (e.g. Ubuntu snap / flatpak / desktop entries)
         if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
             for dir_str in xdg_data_dirs.split(':') {
                 let trimmed = dir_str.trim();
@@ -226,10 +242,14 @@ impl LauncherEngine {
             }
         }
 
-        // Add extra desktop paths from config
-        for extra in &self.config.apps.extra_desktop_paths {
-            let expanded = expand_tilde(extra);
-            let p = PathBuf::from(expanded);
+        // 5. System fallbacks if not already present from $XDG_DATA_DIRS
+        let system_fallbacks = [
+            PathBuf::from("/usr/local/share/applications"),
+            PathBuf::from("/usr/share/applications"),
+            PathBuf::from("/var/lib/snapd/desktop/applications"),
+            PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+        ];
+        for p in system_fallbacks {
             if !paths.contains(&p) {
                 paths.push(p);
             }
@@ -1796,6 +1816,38 @@ mod tests {
         assert_eq!(remove_vietnamese_accents("Học tập"), "hoc tap");
         assert_eq!(remove_vietnamese_accents("Đường dẫn"), "duong dan");
         assert_eq!(remove_vietnamese_accents("Lập trình Rust"), "lap trinh rust");
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn test_desktop_entry_precedence() {
+        use std::io::Write;
+        let temp_dir = std::env::temp_dir().join(format!("view_launcher_test_prec_{}", std::process::id()));
+        let user_dir = temp_dir.join("user");
+        let sys_dir = temp_dir.join("sys");
+        let _ = fs::create_dir_all(&user_dir);
+        let _ = fs::create_dir_all(&sys_dir);
+
+        let user_desktop = user_dir.join("testapp.desktop");
+        let sys_desktop = sys_dir.join("testapp.desktop");
+
+        let mut f1 = fs::File::create(&user_desktop).unwrap();
+        writeln!(f1, "[Desktop Entry]\nType=Application\nName=TestApp\nExec=user_cmd").unwrap();
+
+        let mut f2 = fs::File::create(&sys_desktop).unwrap();
+        writeln!(f2, "[Desktop Entry]\nType=Application\nName=TestApp\nExec=sys_cmd").unwrap();
+
+        let mut config = Config::default();
+        config.apps.extra_desktop_paths = vec![
+            user_dir.to_string_lossy().to_string(),
+            sys_dir.to_string_lossy().to_string(),
+        ];
+        let engine = LauncherEngine::new(config);
+        let found = engine.apps.iter().find(|a| a.name == "TestApp");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().exec_or_path, "user_cmd");
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
