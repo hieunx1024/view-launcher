@@ -146,7 +146,7 @@ pub struct LauncherEngine {
     pub history: Arc<RwLock<HistoryManager>>,
     pub clipboard: Arc<crate::clipboard::ClipboardManager>,
     matcher: SkimMatcherV2,
-    config: Config,
+    pub config: Config,
 }
 
 impl LauncherEngine {

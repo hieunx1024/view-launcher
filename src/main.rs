@@ -48,10 +48,14 @@ fn try_send_to_existing_instance(msg: &[u8]) -> bool {
 #[cfg(windows)]
 fn try_send_to_existing_instance(msg: &[u8]) -> bool {
     let addr: SocketAddr = "127.0.0.1:42425".parse().unwrap();
-    if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(50)) {
-        let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
-        let _ = stream.write_all(msg);
-        return true;
+    for _ in 0..2 {
+        if let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(200)) {
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
+            if stream.write_all(msg).is_ok() {
+                return true;
+            }
+        }
+        thread::sleep(Duration::from_millis(20));
     }
     false
 }
@@ -108,7 +112,76 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
 }
 
 #[cfg(windows)]
+fn start_windows_global_hotkey(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) {
+    thread::spawn(move || {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            RegisterHotKey, MOD_CONTROL, MOD_ALT, MOD_NOREPEAT,
+        };
+
+        const HOTKEY_ID: i32 = 4242;
+        let vk_space = 0x20u32; // VK_SPACE
+
+        let mut registered = unsafe {
+            RegisterHotKey(
+                std::ptr::null_mut(),
+                HOTKEY_ID,
+                (MOD_CONTROL | MOD_ALT | MOD_NOREPEAT) as u32,
+                vk_space,
+            )
+        };
+
+        if registered == 0 {
+            registered = unsafe {
+                RegisterHotKey(
+                    std::ptr::null_mut(),
+                    HOTKEY_ID,
+                    (MOD_CONTROL | MOD_ALT) as u32,
+                    vk_space,
+                )
+            };
+        }
+
+        if registered != 0 {
+            let mut msg: MSG = unsafe { std::mem::zeroed() };
+            while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
+                if msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID as usize {
+                    let ui_weak = ui_handle.clone();
+                    let exit_flag = exit_trigger.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = ui_weak.upgrade() {
+                            if ui.window().is_visible() {
+                                exit_flag.store(true, Ordering::SeqCst);
+                                let _ = ui.hide();
+                            } else {
+                                let cfg = Config::load();
+                                if cfg.theme.mode == "system" {
+                                    ui.set_is_dark(cfg.theme.is_dark());
+                                }
+                                ui.set_search_text("".into());
+                                ui.set_is_expanded(false);
+                                let _ = ui.show();
+                                ui.window().with_winit_window(|w| {
+                                    w.set_visible(true);
+                                    w.focus_window();
+                                });
+                                ui.invoke_focus_search();
+                                animate_window_pop_in(ui_weak.clone());
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
+#[cfg(windows)]
 fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) {
+    // 1. Native Win32 global hotkey thread (Ctrl + Alt + Space) with 0ms spawn latency
+    start_windows_global_hotkey(exit_trigger.clone(), ui_handle.clone());
+
+    // 2. TCP listener for IPC toggle commands from external processes
     let addr: SocketAddr = "127.0.0.1:42425".parse().unwrap();
     if let Ok(listener) = TcpListener::bind(addr) {
         thread::spawn(move || {
@@ -294,8 +367,8 @@ fn populate_items(
         ui.set_is_empty_folder(false);
     }
 
-    const MAX_COMPUTE_RESULTS: usize = 50;
-    for (item, _indices) in results.into_iter().take(MAX_COMPUTE_RESULTS) {
+    let compute_limit = (engine.config.search.max_results + 3).clamp(8, 20);
+    for (item, _indices) in results.into_iter().take(compute_limit) {
         let (slint_icon, category) = match item.item_type {
             launcher::ItemType::App => {
                 let icon = icon_resolver.resolve_icon(item.icon.as_deref(), &item.name, &item.exec_or_path);
