@@ -119,33 +119,52 @@ fn start_windows_global_hotkey(exit_trigger: Arc<AtomicBool>, ui_handle: slint::
             RegisterHotKey, MOD_CONTROL, MOD_ALT, MOD_NOREPEAT,
         };
 
-        const HOTKEY_ID: i32 = 4242;
+        const HOTKEY_ID_ALT_Z: i32 = 4242;
+        const HOTKEY_ID_CTRL_ALT_SPACE: i32 = 4243;
+        let vk_z = 0x5Au32; // VK_Z ('Z')
         let vk_space = 0x20u32; // VK_SPACE
 
-        let mut registered = unsafe {
-            RegisterHotKey(
+        // 1. Primary hotkey: Alt + Z
+        unsafe {
+            let res = RegisterHotKey(
                 std::ptr::null_mut(),
-                HOTKEY_ID,
-                (MOD_CONTROL | MOD_ALT | MOD_NOREPEAT) as u32,
-                vk_space,
-            )
-        };
-
-        if registered == 0 {
-            registered = unsafe {
+                HOTKEY_ID_ALT_Z,
+                (MOD_ALT | MOD_NOREPEAT) as u32,
+                vk_z,
+            );
+            if res == 0 {
                 RegisterHotKey(
                     std::ptr::null_mut(),
-                    HOTKEY_ID,
+                    HOTKEY_ID_ALT_Z,
+                    MOD_ALT as u32,
+                    vk_z,
+                );
+            }
+        };
+
+        // 2. Secondary fallback hotkey: Ctrl + Alt + Space
+        unsafe {
+            let res = RegisterHotKey(
+                std::ptr::null_mut(),
+                HOTKEY_ID_CTRL_ALT_SPACE,
+                (MOD_CONTROL | MOD_ALT | MOD_NOREPEAT) as u32,
+                vk_space,
+            );
+            if res == 0 {
+                RegisterHotKey(
+                    std::ptr::null_mut(),
+                    HOTKEY_ID_CTRL_ALT_SPACE,
                     (MOD_CONTROL | MOD_ALT) as u32,
                     vk_space,
-                )
-            };
-        }
+                );
+            }
+        };
 
-        if registered != 0 {
-            let mut msg: MSG = unsafe { std::mem::zeroed() };
-            while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
-                if msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID as usize {
+        let mut msg: MSG = unsafe { std::mem::zeroed() };
+        while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
+            if msg.message == WM_HOTKEY
+                && (msg.wParam == HOTKEY_ID_ALT_Z as usize
+                    || msg.wParam == HOTKEY_ID_CTRL_ALT_SPACE as usize) {
                     let ui_weak = ui_handle.clone();
                     let exit_flag = exit_trigger.clone();
                     let _ = slint::invoke_from_event_loop(move || {
@@ -172,7 +191,6 @@ fn start_windows_global_hotkey(exit_trigger: Arc<AtomicBool>, ui_handle: slint::
                     });
                 }
             }
-        }
     });
 }
 
@@ -1344,7 +1362,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The window is first shown as part of `run()` itself (cold start becoming the
     // daemon); schedule the same pop-in transition for that initial appearance too.
     animate_window_pop_in(ui.as_weak());
-    ui.run()?;
+    ui.show()?;
+    slint::run_event_loop_until_quit()?;
 
     // Cleanup socket on exit
     #[cfg(unix)]

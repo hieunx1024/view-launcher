@@ -718,7 +718,7 @@ impl LauncherEngine {
         // informational rows (same rendering as the "@" mode index below).
         if trimmed_query == "?" {
             let shortcuts: &[(&str, &str)] = &[
-                ("Ctrl+Alt+Space", "Toggle the launcher window (global shortcut)"),
+                ("Alt+Z / Ctrl+Alt+Space", "Toggle the launcher window (global shortcut)"),
                 ("Enter", "Open / run / copy the selected result"),
                 ("Up / Down", "Navigate results (or recall past \"!\" commands in shell mode)"),
                 ("Tab", "Enter the selected folder (file search mode)"),
@@ -2013,12 +2013,12 @@ mod tests {
         assert!(results.iter().all(|(item, _)| item.item_type == ItemType::Calc));
         // The global toggle shortcut and the new "!" shell mode should both be
         // documented in the list.
-        assert!(results.iter().any(|(item, _)| item.name == "Ctrl+Alt+Space"));
+        assert!(results.iter().any(|(item, _)| item.name.contains("Alt+Z")));
         assert!(results.iter().any(|(item, _)| item.name == "! <command>"));
 
         // "?" is an exact match only; a question mark elsewhere is just a query.
         let not_help = engine.search("what is 5?");
-        assert!(not_help.iter().all(|(item, _)| item.name != "Ctrl+Alt+Space"));
+        assert!(not_help.iter().all(|(item, _)| !item.name.contains("Alt+Z")));
     }
 
     #[test]

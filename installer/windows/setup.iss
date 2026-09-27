@@ -1,6 +1,6 @@
 ; Inno Setup Script for View Launcher
 #define MyAppName "View Launcher"
-#define MyAppVersion "0.4.2"
+#define MyAppVersion "0.4.3"
 #define MyAppPublisher "Hieu Nguyen"
 #define MyAppURL "https://github.com/hieunx1024/view-launcher"
 #define MyAppExeName "view-launcher.exe"
@@ -30,7 +30,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "startupicon"; Description: "Automatically start with Windows and register Ctrl+Alt+Space"; GroupDescription: "Startup Options"; Flags: checkedonce
+Name: "startupicon"; Description: "Automatically start with Windows and register Alt+Z"; GroupDescription: "Startup Options"; Flags: checkedonce
 
 [Files]
 Source: "..\..\target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion

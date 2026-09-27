@@ -444,10 +444,11 @@ pub fn setup_global_shortcut() {
                     let _ = std::process::Command::new("gsettings")
                         .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "command", "view-launcher"])
                         .status();
-                    let _ = std::process::Command::new("gsettings")
-                        .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "binding", "<Control><Alt>space"])
-                        .status();
                 }
+                // Ensure binding is set to Alt+Z
+                let _ = std::process::Command::new("gsettings")
+                    .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "binding", "<Alt>z"])
+                    .status();
             }
         }
     }

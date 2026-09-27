@@ -34,7 +34,7 @@ Download the latest `.deb` package from GitHub Releases:
 sudo dpkg -i view-launcher_0.2.0_amd64.deb
 ```
 
-The package automatically installs the desktop entry, system icons, and registers the global hotkey (`Ctrl + Alt + Space`) on GNOME desktop environments.
+The package automatically installs the desktop entry, system icons, and registers the global hotkey (`Alt + Z`) on GNOME desktop environments.
 
 ### Windows
 
@@ -76,7 +76,7 @@ The compiled binary will be located at `target/release/view-launcher` (or `targe
 
 | Shortcut | Context | Action |
 | :--- | :--- | :--- |
-| `Ctrl + Alt + Space` | Global Desktop | Toggle launcher window |
+| `Alt + Z` / `Ctrl + Alt + Space` | Global Desktop | Toggle launcher window |
 | `Down` / `Up` | Search List | Navigate through search results |
 | `Enter` | Search List | Launch selected application, open file, or copy calculation |
 | `Tab` | File Search Mode | Enter selected directory in search path |
