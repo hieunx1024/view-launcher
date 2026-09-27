@@ -535,22 +535,36 @@ impl LauncherEngine {
 
     /// Resolves dynamic path searching (e.g. typing `~/Downloads/` directly lists Downloads contents)
     pub fn resolve_path_search(&self, input: &str) -> Option<(PathBuf, String)> {
-        if !input.contains('/') && input != "~" {
+        let is_path_like = input.contains('/')
+            || input.contains('\\')
+            || input == "~"
+            || (input.len() >= 2 && input.chars().nth(1) == Some(':'));
+        if !is_path_like {
             return None;
         }
 
         let home = dirs::home_dir()?;
-        let expanded = if input.starts_with("~/") {
-            input.replacen("~/", &format!("{}/", home.to_string_lossy()), 1)
+        let home_str = home.to_string_lossy();
+        let sep = std::path::MAIN_SEPARATOR;
+        #[allow(unused_mut)]
+        let mut expanded = if input.starts_with("~/") {
+            input.replacen("~/", &format!("{home_str}{sep}"), 1)
+        } else if input.starts_with(r"~\") {
+            input.replacen(r"~\", &format!("{home_str}{sep}"), 1)
         } else if input == "~" {
-            format!("{}/", home.to_string_lossy())
+            home_str.to_string()
         } else {
             input.to_string()
         };
 
+        #[cfg(not(target_os = "windows"))]
+        {
+            expanded = expanded.replace('\\', "/");
+        }
+
         let path = PathBuf::from(&expanded);
         
-        if expanded.ends_with('/') {
+        if expanded.ends_with('/') || expanded.ends_with('\\') {
             if path.is_dir() {
                 Some((path, String::new()))
             } else {
@@ -1603,8 +1617,16 @@ impl LauncherEngine {
             #[cfg(windows)]
             use std::os::windows::process::CommandExt;
             #[allow(unused_mut)]
+            let dir_str = dir.to_string_lossy().to_string();
             let mut cmd = Command::new("cmd");
-            cmd.args(&["/C", "start", "wt.exe", "-d", &dir.to_string_lossy()]);
+            cmd.args(&[
+                "/C",
+                "start",
+                "",
+                "cmd",
+                "/C",
+                &format!("where wt.exe >nul 2>&1 && start wt.exe -d \"{0}\" || start powershell.exe -NoExit -Command Set-Location -LiteralPath '{0}'", dir_str),
+            ]);
             #[cfg(windows)]
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             let _ = cmd.spawn();
@@ -1645,6 +1667,14 @@ impl LauncherEngine {
 
         #[cfg(target_os = "windows")]
         {
+            // Use native Win32 clipboard API through arboard for full Unicode & Vietnamese accents support
+            if let Ok(mut cb) = arboard::Clipboard::new() {
+                if cb.set_text(text).is_ok() {
+                    return;
+                }
+            }
+
+            // Fallback to clip.exe
             #[cfg(windows)]
             use std::os::windows::process::CommandExt;
             use std::io::Write;
@@ -1667,6 +1697,10 @@ fn expand_tilde(path_str: &str) -> String {
     if path_str.starts_with("~/") {
         if let Some(home) = dirs::home_dir() {
             return path_str.replacen("~/", &format!("{}/", home.to_string_lossy()), 1);
+        }
+    } else if path_str.starts_with(r"~\") {
+        if let Some(home) = dirs::home_dir() {
+            return path_str.replacen(r"~\", &format!("{}\\", home.to_string_lossy()), 1);
         }
     } else if path_str == "~" {
         if let Some(home) = dirs::home_dir() {
@@ -1863,6 +1897,7 @@ mod tests {
             assert!(engine.resolve_path_search(&home_str).is_some());
             assert!(engine.resolve_path_search("~").is_some());
             assert!(engine.resolve_path_search("~/").is_some());
+            assert!(engine.resolve_path_search(r"~\").is_some());
         }
     }
 

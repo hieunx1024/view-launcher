@@ -54,17 +54,47 @@ impl ThemeConfig {
 pub fn is_system_dark_mode() -> bool {
     #[cfg(target_os = "windows")]
     {
-        use std::process::Command;
-        use std::os::windows::process::CommandExt;
-        let mut cmd = Command::new("reg");
-        cmd.args(&["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "/v", "AppsUseLightTheme"]);
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        if let Ok(output) = cmd.output() {
-            let text = String::from_utf8_lossy(&output.stdout);
-            if text.contains("0x0") {
-                return true;
-            } else if text.contains("0x1") {
-                return false;
+        use windows_sys::Win32::System::Registry::{
+            RegOpenKeyExW, RegQueryValueExW, RegCloseKey, HKEY_CURRENT_USER, KEY_READ,
+        };
+
+        let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+            .encode_utf16()
+            .collect();
+        let value_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
+
+        let mut hkey = std::ptr::null_mut();
+        let status = unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                subkey.as_ptr(),
+                0,
+                KEY_READ,
+                &mut hkey,
+            )
+        };
+
+        if status == 0 && !hkey.is_null() {
+            let mut data: u32 = 0;
+            let mut data_size = std::mem::size_of::<u32>() as u32;
+            let mut data_type: u32 = 0;
+
+            let query_status = unsafe {
+                RegQueryValueExW(
+                    hkey,
+                    value_name.as_ptr(),
+                    std::ptr::null_mut(),
+                    &mut data_type,
+                    &mut data as *mut u32 as *mut u8,
+                    &mut data_size,
+                )
+            };
+
+            unsafe { RegCloseKey(hkey) };
+
+            if query_status == 0 {
+                // AppsUseLightTheme == 0 means Dark mode is enabled
+                return data == 0;
             }
         }
         true
@@ -358,7 +388,10 @@ pub fn set_autostart(enabled: bool) -> Result<(), std::io::Error> {
                 if let Some(parent) = path.parent() {
                     let _ = fs::create_dir_all(parent);
                 }
-                let bat_content = "@start \"\" \"view-launcher.exe\"\n";
+                let exe_path = std::env::current_exe()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "view-launcher.exe".to_string());
+                let bat_content = format!("@start \"\" \"{}\"\n", exe_path);
                 fs::write(&path, bat_content)?;
             } else if path.exists() {
                 let _ = fs::remove_file(&path);

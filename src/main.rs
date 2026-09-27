@@ -142,6 +142,10 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
                                     ui.set_search_text("".into());
                                     ui.set_is_expanded(false);
                                     let _ = ui.show();
+                                    ui.window().with_winit_window(|w| {
+                                        w.set_visible(true);
+                                        w.focus_window();
+                                    });
                                     ui.invoke_focus_search();
                                     animate_window_pop_in(ui_weak.clone());
                                 }
@@ -409,13 +413,13 @@ fn ensure_selection_visible(ui: &AppWindow, selected_index: i32) {
 /// of resolving every icon in one blocking call at startup.
 #[cfg(target_os = "windows")]
 fn warm_icon_cache_chunked(icon_resolver: Arc<IconResolver>, apps: Vec<LauncherItem>, start: usize) {
-    const CHUNK_SIZE: usize = 20;
+    const CHUNK_SIZE: usize = 5;
     let end = (start + CHUNK_SIZE).min(apps.len());
     for app in &apps[start..end] {
         let _ = icon_resolver.resolve_icon(app.icon.as_deref(), &app.name, &app.exec_or_path);
     }
     if end < apps.len() {
-        slint::Timer::single_shot(std::time::Duration::from_millis(1), move || {
+        slint::Timer::single_shot(std::time::Duration::from_millis(15), move || {
             warm_icon_cache_chunked(icon_resolver, apps, end);
         });
     }

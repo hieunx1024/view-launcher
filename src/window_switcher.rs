@@ -135,31 +135,54 @@ pub fn get_open_windows(_known_apps: &[LauncherItem]) -> Vec<WindowItem> {
         }
     }
 
-    // 5. Windows 11 native active window switcher
+    // 5. Windows 10/11 native active window switcher (<1ms via Win32 EnumWindows)
     #[cfg(target_os = "windows")]
     {
-        let ps_cmd = "Get-Process | Where-Object { $_.MainWindowTitle } | ForEach-Object { \"$($_.Id)|$($_.ProcessName)|$($_.MainWindowTitle)\" }";
-        if let Ok(output) = Command::new("powershell")
-            .args(&["-NoProfile", "-NonInteractive", "-Command", ps_cmd])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            for line in text.lines() {
-                let parts: Vec<&str> = line.splitn(3, '|').collect();
-                if parts.len() == 3 {
-                    let pid = parts[0].trim();
-                    let proc_name = parts[1].trim();
-                    let title = parts[2].trim();
-                    if !title.is_empty() && proc_name != "view-launcher" {
-                        windows.push(WindowItem {
-                            id: format!("winpid:{}", pid),
-                            title: title.to_string(),
-                            class_name: proc_name.to_string(),
-                        });
+        use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowTextW, GetWindowTextLengthW, GetWindowThreadProcessId,
+            IsWindowVisible, GetWindowLongW, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
+        };
+
+        unsafe extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            unsafe {
+                let list = &mut *(lparam as *mut Vec<WindowItem>);
+
+                if IsWindowVisible(hwnd) == 0 {
+                    return 1;
+                }
+
+                // Filter out tool windows or overlay utility popups
+                let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+                if (ex_style & WS_EX_TOOLWINDOW) != 0 {
+                    return 1;
+                }
+
+                let len = GetWindowTextLengthW(hwnd);
+                if len > 0 {
+                    let mut title_buf = vec![0u16; (len + 1) as usize];
+                    let read_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), len + 1);
+                    if read_len > 0 {
+                        let title = String::from_utf16_lossy(&title_buf[..read_len as usize]).trim().to_string();
+                        if !title.is_empty() && title != "View Launcher" {
+                            let mut pid: u32 = 0;
+                            GetWindowThreadProcessId(hwnd, &mut pid);
+                            list.push(WindowItem {
+                                id: format!("winhwnd:{}", hwnd as isize),
+                                title,
+                                class_name: format!("PID: {}", pid),
+                            });
+                        }
                     }
                 }
+                1
             }
+        }
+
+        unsafe {
+            let mut win_list: Vec<WindowItem> = Vec::new();
+            EnumWindows(Some(enum_windows_callback), &mut win_list as *mut _ as LPARAM);
+            windows.extend(win_list);
         }
     }
 
@@ -260,6 +283,24 @@ pub fn focus_window(id: &str) {
 
     #[cfg(target_os = "windows")]
     {
+        if let Some(hwnd_str) = id.strip_prefix("winhwnd:") {
+            if let Ok(hwnd_val) = hwnd_str.parse::<isize>() {
+                use windows_sys::Win32::Foundation::HWND;
+                use windows_sys::Win32::UI::WindowsAndMessaging::{
+                    SetForegroundWindow, ShowWindow, IsIconic, BringWindowToTop, SW_RESTORE,
+                };
+                let hwnd = hwnd_val as HWND;
+                unsafe {
+                    if IsIconic(hwnd) != 0 {
+                        ShowWindow(hwnd, SW_RESTORE);
+                    }
+                    BringWindowToTop(hwnd);
+                    SetForegroundWindow(hwnd);
+                }
+                return;
+            }
+        }
+
         if let Some(pid) = id.strip_prefix("winpid:") {
             let script = format!("$w = (New-Object -ComObject WScript.Shell); $w.AppActivate({})", pid);
             let _ = Command::new("powershell")

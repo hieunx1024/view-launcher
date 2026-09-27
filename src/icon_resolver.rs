@@ -522,6 +522,12 @@ impl IconResolver {
             SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
         };
         use windows_sys::Win32::UI::WindowsAndMessaging::{PrivateExtractIconsW, HICON};
+        use windows_sys::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+
+        // Ensure COM is initialized on this thread so SHGetFileInfoW can resolve .lnk targets
+        unsafe {
+            let _ = CoInitializeEx(std::ptr::null_mut(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32);
+        }
 
         let clean_path = path_str.trim().trim_matches('"');
         let wide_path: Vec<u16> = clean_path.encode_utf16().chain(std::iter::once(0)).collect();

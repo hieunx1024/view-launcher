@@ -69,15 +69,37 @@ pub fn discover_plugins() -> Vec<PluginInfo> {
 
 /// Runs a specific custom plugin script with the given query and parses its stdout.
 pub fn execute_plugin(plugin: &PluginInfo, query: &str) -> Vec<LauncherItem> {
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let ext = plugin.path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        let mut c = match ext.as_str() {
+            "bat" | "cmd" => {
+                let mut cmd = Command::new("cmd");
+                cmd.args(&["/C", &plugin.path.to_string_lossy()]);
+                cmd
+            }
+            "ps1" => {
+                let mut cmd = Command::new("powershell");
+                cmd.args(&["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", &plugin.path.to_string_lossy()]);
+                cmd
+            }
+            "py" => {
+                let mut cmd = Command::new("python");
+                cmd.arg(&plugin.path);
+                cmd
+            }
+            _ => Command::new(&plugin.path),
+        };
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        c
+    };
+
+    #[cfg(not(target_os = "windows"))]
     let mut cmd = Command::new(&plugin.path);
+
     if !query.trim().is_empty() {
         cmd.arg(query.trim());
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
     let output = match cmd.output() {
