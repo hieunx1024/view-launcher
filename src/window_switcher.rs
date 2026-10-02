@@ -105,9 +105,12 @@ pub fn get_open_windows(_known_apps: &[LauncherItem]) -> Vec<WindowItem> {
         let mut seen = HashSet::new();
 
         for app in _known_apps {
-            let exec_first = app.exec_or_path.split_whitespace().next().unwrap_or("");
-            let bin_name = Path::new(exec_first)
-                .file_name()
+            let tokens = crate::launcher::parse_command_line(&app.exec_or_path);
+            let bin_target = tokens.iter()
+                .find(|t| *t != "env" && !t.contains('='))
+                .or_else(|| tokens.first());
+            let bin_name = bin_target
+                .and_then(|p| Path::new(p).file_name())
                 .map(|s| s.to_string_lossy().to_lowercase())
                 .unwrap_or_default();
 
@@ -321,9 +324,9 @@ pub fn focus_window(id: &str) {
 
     #[cfg(unix)]
     if let Some(exec) = id.strip_prefix("app:") {
-        let tokens: Vec<&str> = exec.split_whitespace().collect();
+        let tokens = crate::launcher::parse_command_line(exec);
         if !tokens.is_empty() {
-            let mut cmd = Command::new(tokens[0]);
+            let mut cmd = Command::new(&tokens[0]);
             if tokens.len() > 1 {
                 cmd.args(&tokens[1..]);
             }

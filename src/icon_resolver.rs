@@ -466,10 +466,19 @@ impl IconResolver {
                 }
 
                 // 4. Check executable name variations
-                if let Some(bin) = Path::new(exec_or_path).file_name().and_then(|f| f.to_str()) {
-                    let bin_clean = bin.split_whitespace().next().unwrap_or("").to_lowercase();
+                let tokens = crate::launcher::parse_command_line(exec_or_path);
+                let bin_target = tokens.iter()
+                    .find(|t| *t != "env" && !t.contains('='))
+                    .or_else(|| tokens.first());
+                if let Some(bin) = bin_target.and_then(|p| Path::new(p).file_name()).and_then(|f| f.to_str()) {
+                    let bin_clean = bin.to_lowercase();
                     if let Some(path) = index.get(&bin_clean) {
                         return Some(path.clone());
+                    }
+                    if let Some(stripped) = bin_clean.strip_suffix(".sh") {
+                        if let Some(path) = index.get(stripped) {
+                            return Some(path.clone());
+                        }
                     }
                     // Executable without '-' or '_' (e.g. "gnome-text-editor" -> "texteditor" or "gnometexteditor")
                     if let Some(last_bin) = bin_clean.split('-').last() {

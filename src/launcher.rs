@@ -392,7 +392,7 @@ impl LauncherEngine {
                         }
                     }
                     "Exec" => {
-                        let tokens: Vec<&str> = val.split_whitespace().collect();
+                        let tokens = parse_command_line(val);
                         let mut cleaned_tokens = Vec::new();
                         for token in tokens {
                             // Skip any placeholder starting with '%'
@@ -401,10 +401,12 @@ impl LauncherEngine {
                             }
                             cleaned_tokens.push(token);
                         }
-                        if let Some(&"--") = cleaned_tokens.last() {
-                            cleaned_tokens.pop();
+                        if let Some(last) = cleaned_tokens.last() {
+                            if last == "--" {
+                                cleaned_tokens.pop();
+                            }
                         }
-                        exec = cleaned_tokens.join(" ");
+                        exec = cleaned_tokens.iter().map(|t| quote_arg(t)).collect::<Vec<_>>().join(" ");
                     }
                     "Comment" => {
                         comment = Some(val.to_string());
@@ -1515,7 +1517,7 @@ impl LauncherEngine {
         {
             match item.item_type {
                 ItemType::App => {
-                    let tokens: Vec<&str> = item.exec_or_path.split_whitespace().collect();
+                    let tokens = parse_command_line(&item.exec_or_path);
                     if tokens.is_empty() { return; }
 
                     if item.terminal {
@@ -1534,7 +1536,7 @@ impl LauncherEngine {
                                 .ok();
                         }
                     } else {
-                        let mut cmd = Command::new(tokens[0]);
+                        let mut cmd = Command::new(&tokens[0]);
                         if tokens.len() > 1 {
                             cmd.args(&tokens[1..]);
                         }
@@ -1840,9 +1842,122 @@ pub fn remove_vietnamese_accents(s: &str) -> String {
     }).collect()
 }
 
+pub fn quote_arg(s: &str) -> String {
+    if s.contains(' ') || s.contains('\t') || s.contains('"') || s.contains('\'') {
+        let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+        format!("\"{escaped}\"")
+    } else {
+        s.to_string()
+    }
+}
+
+pub fn parse_command_line(cmd: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = None;
+    let mut in_arg = false;
+    let mut chars = cmd.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                if let Some(next) = chars.next() {
+                    current.push(next);
+                    in_arg = true;
+                }
+            }
+            '"' | '\'' => {
+                if let Some(q) = in_quotes {
+                    if q == c {
+                        in_quotes = None;
+                    } else {
+                        current.push(c);
+                    }
+                } else {
+                    in_quotes = Some(c);
+                    in_arg = true;
+                }
+            }
+            c if c.is_whitespace() => {
+                if in_quotes.is_some() {
+                    current.push(c);
+                } else if in_arg {
+                    args.push(current);
+                    current = String::new();
+                    in_arg = false;
+                }
+            }
+            c => {
+                current.push(c);
+                in_arg = true;
+            }
+        }
+    }
+
+    if in_arg {
+        args.push(current);
+    }
+
+    args
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_command_line() {
+        let cmd = r#"env GTK_IM_MODULE=ibus XMODIFIERS=@im=ibus IBUS_ENABLE_SYNC_MODE=1 "/opt/idea-IU-262.8665.337/bin/idea.sh" %f"#;
+        let tokens = parse_command_line(cmd);
+        assert_eq!(
+            tokens,
+            vec![
+                "env",
+                "GTK_IM_MODULE=ibus",
+                "XMODIFIERS=@im=ibus",
+                "IBUS_ENABLE_SYNC_MODE=1",
+                "/opt/idea-IU-262.8665.337/bin/idea.sh",
+                "%f"
+            ]
+        );
+
+        let cmd2 = r#""/path/with spaces/app" -v 'single quoted string' "unclosed"#;
+        let tokens2 = parse_command_line(cmd2);
+        assert_eq!(
+            tokens2,
+            vec![
+                "/path/with spaces/app",
+                "-v",
+                "single quoted string",
+                "unclosed"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_quote_arg() {
+        assert_eq!(quote_arg("simple"), "simple");
+        assert_eq!(quote_arg("/path/with space"), "\"/path/with space\"");
+        assert_eq!(quote_arg(r#"say "hi""#), r#""say \"hi\"""#);
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn test_parse_idea_desktop() {
+        let path = Path::new("/usr/share/applications/idea.desktop");
+        if path.exists() {
+            let config = Config::default();
+            let engine = LauncherEngine::new(config);
+            if let Some(item) = engine.parse_desktop_file(path) {
+                let tokens = parse_command_line(&item.exec_or_path);
+                assert!(!tokens.is_empty());
+                assert!(!tokens.iter().any(|t| t.starts_with('"') || t.ends_with('"')));
+                let bin_target = tokens.iter().find(|t| *t != "env" && !t.contains('='));
+                assert!(bin_target.is_some());
+                assert!(Path::new(bin_target.unwrap()).exists());
+            }
+        }
+    }
 
     #[test]
     fn test_remove_vietnamese_accents() {
