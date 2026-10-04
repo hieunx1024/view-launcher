@@ -405,9 +405,11 @@ pub fn set_autostart(enabled: bool) -> Result<(), std::io::Error> {
 pub fn setup_global_shortcut() {
     #[cfg(not(target_os = "windows"))]
     {
-        let is_gnome = std::env::var("XDG_CURRENT_DESKTOP")
-            .map(|d| d.to_lowercase().contains("gnome") || d.to_lowercase().contains("ubuntu"))
-            .unwrap_or(false);
+        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase();
+        let is_gnome = desktop.contains("gnome") || desktop.contains("ubuntu");
+        let is_hyprland = desktop.contains("hyprland");
+
+        let is_sway = desktop.contains("sway") || std::env::var("SWAYSOCK").is_ok();
 
         if is_gnome {
             // Ensure GNOME automatically centers new windows in the middle of the screen
@@ -445,10 +447,66 @@ pub fn setup_global_shortcut() {
                         .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "command", "view-launcher"])
                         .status();
                 }
-                // Ensure binding is set to Alt+Z
+                // Ensure binding is set to Ctrl+Alt+Space
                 let _ = std::process::Command::new("gsettings")
-                    .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "binding", "<Alt>z"])
+                    .args(&["set", &format!("org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{}", path), "binding", "<Primary><Alt>space"])
                     .status();
+            }
+        } else if is_hyprland {
+            if let Some(mut hypr_cfg) = dirs::config_dir() {
+                hypr_cfg.push("hypr");
+                hypr_cfg.push("hyprland.conf");
+                if hypr_cfg.exists() {
+                    if let Ok(content) = fs::read_to_string(&hypr_cfg) {
+                        let mut new_content = content.clone();
+                        let mut modified = false;
+                        if new_content.contains("bind = CTRL ALT, SPACE, exec, view-launcher") {
+                            new_content = new_content.replace(
+                                "bind = CTRL ALT, SPACE, exec, view-launcher",
+                                "bind = CTRL ALT, space, exec, view-launcher",
+                            );
+                            modified = true;
+                        } else if !new_content.contains("exec, view-launcher") {
+                            new_content.push_str("\nbind = CTRL ALT, space, exec, view-launcher\n");
+                            modified = true;
+                        }
+                        if modified {
+                            let _ = fs::write(&hypr_cfg, new_content);
+                            let _ = std::process::Command::new("hyprctl").arg("reload").status();
+                        }
+                    }
+                }
+            }
+        } else if is_sway {
+            if let Some(mut sway_cfg) = dirs::config_dir() {
+                sway_cfg.push("sway");
+                sway_cfg.push("config");
+                if sway_cfg.exists() {
+                    if let Ok(content) = fs::read_to_string(&sway_cfg) {
+                        let mut new_content = content.clone();
+                        let mut modified = false;
+                        if new_content.contains("bindsym Alt+z exec view-launcher") {
+                            new_content = new_content.replace(
+                                "bindsym Alt+z exec view-launcher",
+                                "bindsym Ctrl+Alt+space exec view-launcher",
+                            );
+                            modified = true;
+                        } else if new_content.contains("bindsym Alt+Z exec view-launcher") {
+                            new_content = new_content.replace(
+                                "bindsym Alt+Z exec view-launcher",
+                                "bindsym Ctrl+Alt+space exec view-launcher",
+                            );
+                            modified = true;
+                        } else if !new_content.contains("exec view-launcher") {
+                            new_content.push_str("\nbindsym Ctrl+Alt+space exec view-launcher\n");
+                            modified = true;
+                        }
+                        if modified {
+                            let _ = fs::write(&sway_cfg, new_content);
+                            let _ = std::process::Command::new("swaymsg").arg("reload").status();
+                        }
+                    }
+                }
             }
         }
     }

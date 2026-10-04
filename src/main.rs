@@ -17,13 +17,13 @@ use i_slint_backend_winit::WinitWindowAccessor;
 
 use std::io::{Read, Write};
 
+use std::time::{Duration, Instant};
+
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 
 #[cfg(windows)]
 use std::net::{TcpListener, TcpStream, SocketAddr};
-#[cfg(windows)]
-use std::time::Duration;
 
 #[cfg(unix)]
 fn get_socket_path() -> PathBuf {
@@ -60,8 +60,148 @@ fn try_send_to_existing_instance(msg: &[u8]) -> bool {
     false
 }
 
+#[cfg(target_os = "windows")]
+fn is_launcher_focused(ui: &AppWindow) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    use i_slint_backend_winit::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    if let Some(focused) = ui.window().with_winit_window(|w| {
+        if let Ok(handle) = w.window_handle() {
+            if let RawWindowHandle::Win32(h) = handle.as_raw() {
+                let fg = unsafe { GetForegroundWindow() };
+                return fg == (h.hwnd.get() as _);
+            }
+        }
+        w.has_focus()
+    }) {
+        return focused;
+    }
+    false
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn is_launcher_focused(ui: &AppWindow) -> bool {
+    // 1. If running under Hyprland, query Hyprland IPC in <0.05ms
+    if let (Ok(runtime_dir), Ok(sig)) = (std::env::var("XDG_RUNTIME_DIR"), std::env::var("HYPRLAND_INSTANCE_SIGNATURE")) {
+        let sock_path = PathBuf::from(runtime_dir).join("hypr").join(sig).join(".socket.sock");
+        if let Ok(mut stream) = UnixStream::connect(&sock_path) {
+            let _ = stream.set_read_timeout(Some(Duration::from_millis(50)));
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
+            if stream.write_all(b"j/activewindow").is_ok() {
+                let mut buf = [0u8; 1024];
+                if let Ok(n) = stream.read(&mut buf) {
+                    if let Ok(s) = std::str::from_utf8(&buf[..n]) {
+                        return s.contains("\"class\": \"view-launcher\"");
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Fallback to winit focus status
+    ui.window().with_winit_window(|w| w.has_focus()).unwrap_or(false)
+}
+
+#[cfg(not(any(target_os = "windows", all(unix, not(target_os = "macos")))))]
+fn is_launcher_focused(ui: &AppWindow) -> bool {
+    ui.window().with_winit_window(|w| w.has_focus()).unwrap_or(false)
+}
+
+fn focus_launcher_window(ui: &AppWindow) {
+    ui.window().with_winit_window(|w| {
+        #[cfg(target_os = "windows")]
+        {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
+            use i_slint_backend_winit::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            w.set_visible(true);
+            if let Ok(handle) = w.window_handle() {
+                if let RawWindowHandle::Win32(h) = handle.as_raw() {
+                    unsafe {
+                        BringWindowToTop(h.hwnd.get() as _);
+                        SetForegroundWindow(h.hwnd.get() as _);
+                    }
+                }
+            }
+        }
+        w.focus_window();
+    });
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let (Ok(runtime_dir), Ok(sig)) = (std::env::var("XDG_RUNTIME_DIR"), std::env::var("HYPRLAND_INSTANCE_SIGNATURE")) {
+            let sock_path = PathBuf::from(runtime_dir).join("hypr").join(sig).join(".socket.sock");
+            if let Ok(mut stream) = UnixStream::connect(&sock_path) {
+                let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
+                let _ = stream.write_all(b"dispatch focuswindow title:^View Launcher$");
+            }
+        } else if std::env::var("SWAYSOCK").is_ok() {
+            let _ = std::process::Command::new("swaymsg")
+                .args(&["[app_id=\"view-launcher\"] focus"])
+                .status();
+        }
+    }
+}
+
+fn show_and_focus_launcher(
+    ui: &AppWindow,
+    ui_weak: slint::Weak<AppWindow>,
+    shown_instant: &Arc<std::sync::RwLock<Instant>>,
+) {
+    let cfg = Config::load();
+    if cfg.theme.mode == "system" {
+        ui.set_is_dark(cfg.theme.is_dark());
+    }
+    ui.set_search_text("".into());
+    ui.set_is_expanded(false);
+    if let Ok(mut lock) = shown_instant.write() {
+        *lock = Instant::now();
+    }
+    let _ = ui.show();
+    focus_launcher_window(ui);
+    ui.invoke_focus_search();
+    animate_window_pop_in(ui_weak);
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn start_hyprland_focus_watcher(ui_handle: slint::Weak<AppWindow>, shown_instant: Arc<std::sync::RwLock<Instant>>) {
+    if let (Ok(runtime_dir), Ok(sig)) = (std::env::var("XDG_RUNTIME_DIR"), std::env::var("HYPRLAND_INSTANCE_SIGNATURE")) {
+        let sock2_path = PathBuf::from(runtime_dir).join("hypr").join(sig).join(".socket2.sock");
+        thread::spawn(move || {
+            use std::io::BufRead;
+            if let Ok(stream) = UnixStream::connect(&sock2_path) {
+                let reader = std::io::BufReader::new(stream);
+                for line in reader.lines() {
+                    let Ok(line) = line else { break; };
+                    if line.starts_with("activewindow>>") {
+                        let active = line.trim_start_matches("activewindow>>");
+                        if !active.starts_with("view-launcher,") {
+                            let ui_weak = ui_handle.clone();
+                            let shown = shown_instant.clone();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(ui) = ui_weak.upgrade() {
+                                    if ui.window().is_visible() && !ui.get_in_settings_mode() {
+                                        let elapsed = shown.read().map(|t| t.elapsed()).unwrap_or_default();
+                                        if elapsed > Duration::from_millis(150) {
+                                            let _ = ui.hide();
+                                            ui.set_search_text("".into());
+                                            ui.set_is_expanded(false);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
 #[cfg(unix)]
-fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) {
+fn start_daemon_listener(
+    exit_trigger: Arc<AtomicBool>,
+    ui_handle: slint::Weak<AppWindow>,
+    shown_instant: Arc<std::sync::RwLock<Instant>>,
+) {
     let socket_path = get_socket_path();
     let _ = std::fs::remove_file(&socket_path);
 
@@ -82,25 +222,18 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
                         break;
                     }
 
-                    let _ = slint::invoke_from_event_loop({
-                        let ui_weak = ui_handle.clone();
-                        let exit_flag = exit_trigger.clone();
-                        move || {
-                            if let Some(ui) = ui_weak.upgrade() {
-                                if ui.window().is_visible() {
-                                    exit_flag.store(true, Ordering::SeqCst);
-                                    let _ = ui.hide();
-                                } else {
-                                    let cfg = Config::load();
-                                    if cfg.theme.mode == "system" {
-                                        ui.set_is_dark(cfg.theme.is_dark());
-                                    }
-                                    ui.set_search_text("".into());
-                                    ui.set_is_expanded(false);
-                                    let _ = ui.show();
-                                    ui.invoke_focus_search();
-                                    animate_window_pop_in(ui_weak.clone());
-                                }
+                    let ui_weak = ui_handle.clone();
+                    let exit_flag = exit_trigger.clone();
+                    let shown = shown_instant.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = ui_weak.upgrade() {
+                            let is_visible = ui.window().is_visible();
+                            let is_focused = is_launcher_focused(&ui);
+                            if is_visible && is_focused {
+                                exit_flag.store(true, Ordering::SeqCst);
+                                let _ = ui.hide();
+                            } else {
+                                show_and_focus_launcher(&ui, ui_weak.clone(), &shown);
                             }
                         }
                     });
@@ -112,37 +245,21 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
 }
 
 #[cfg(windows)]
-fn start_windows_global_hotkey(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) {
+fn start_windows_global_hotkey(
+    exit_trigger: Arc<AtomicBool>,
+    ui_handle: slint::Weak<AppWindow>,
+    shown_instant: Arc<std::sync::RwLock<Instant>>,
+) {
     thread::spawn(move || {
         use windows_sys::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
         use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
             RegisterHotKey, MOD_CONTROL, MOD_ALT, MOD_NOREPEAT,
         };
 
-        const HOTKEY_ID_ALT_Z: i32 = 4242;
-        const HOTKEY_ID_CTRL_ALT_SPACE: i32 = 4243;
-        let vk_z = 0x5Au32; // VK_Z ('Z')
+        const HOTKEY_ID_CTRL_ALT_SPACE: i32 = 4242;
         let vk_space = 0x20u32; // VK_SPACE
 
-        // 1. Primary hotkey: Alt + Z
-        unsafe {
-            let res = RegisterHotKey(
-                std::ptr::null_mut(),
-                HOTKEY_ID_ALT_Z,
-                (MOD_ALT | MOD_NOREPEAT) as u32,
-                vk_z,
-            );
-            if res == 0 {
-                RegisterHotKey(
-                    std::ptr::null_mut(),
-                    HOTKEY_ID_ALT_Z,
-                    MOD_ALT as u32,
-                    vk_z,
-                );
-            }
-        };
-
-        // 2. Secondary fallback hotkey: Ctrl + Alt + Space
+        // Register default hotkey: Ctrl + Alt + Space
         unsafe {
             let res = RegisterHotKey(
                 std::ptr::null_mut(),
@@ -162,42 +279,35 @@ fn start_windows_global_hotkey(exit_trigger: Arc<AtomicBool>, ui_handle: slint::
 
         let mut msg: MSG = unsafe { std::mem::zeroed() };
         while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
-            if msg.message == WM_HOTKEY
-                && (msg.wParam == HOTKEY_ID_ALT_Z as usize
-                    || msg.wParam == HOTKEY_ID_CTRL_ALT_SPACE as usize) {
-                    let ui_weak = ui_handle.clone();
-                    let exit_flag = exit_trigger.clone();
-                    let _ = slint::invoke_from_event_loop(move || {
-                        if let Some(ui) = ui_weak.upgrade() {
-                            if ui.window().is_visible() {
-                                exit_flag.store(true, Ordering::SeqCst);
-                                let _ = ui.hide();
-                            } else {
-                                let cfg = Config::load();
-                                if cfg.theme.mode == "system" {
-                                    ui.set_is_dark(cfg.theme.is_dark());
-                                }
-                                ui.set_search_text("".into());
-                                ui.set_is_expanded(false);
-                                let _ = ui.show();
-                                ui.window().with_winit_window(|w| {
-                                    w.set_visible(true);
-                                    w.focus_window();
-                                });
-                                ui.invoke_focus_search();
-                                animate_window_pop_in(ui_weak.clone());
-                            }
+            if msg.message == WM_HOTKEY && msg.wParam == HOTKEY_ID_CTRL_ALT_SPACE as usize {
+                let ui_weak = ui_handle.clone();
+                let exit_flag = exit_trigger.clone();
+                let shown = shown_instant.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        let is_visible = ui.window().is_visible();
+                        let is_focused = is_launcher_focused(&ui);
+                        if is_visible && is_focused {
+                            exit_flag.store(true, Ordering::SeqCst);
+                            let _ = ui.hide();
+                        } else {
+                            show_and_focus_launcher(&ui, ui_weak.clone(), &shown);
                         }
-                    });
-                }
+                    }
+                });
             }
+        }
     });
 }
 
 #[cfg(windows)]
-fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<AppWindow>) {
+fn start_daemon_listener(
+    exit_trigger: Arc<AtomicBool>,
+    ui_handle: slint::Weak<AppWindow>,
+    shown_instant: Arc<std::sync::RwLock<Instant>>,
+) {
     // 1. Native Win32 global hotkey thread (Ctrl + Alt + Space) with 0ms spawn latency
-    start_windows_global_hotkey(exit_trigger.clone(), ui_handle.clone());
+    start_windows_global_hotkey(exit_trigger.clone(), ui_handle.clone(), shown_instant.clone());
 
     // 2. TCP listener for IPC toggle commands from external processes
     let addr: SocketAddr = "127.0.0.1:42425".parse().unwrap();
@@ -217,29 +327,18 @@ fn start_daemon_listener(exit_trigger: Arc<AtomicBool>, ui_handle: slint::Weak<A
                         break;
                     }
 
-                    let _ = slint::invoke_from_event_loop({
-                        let ui_weak = ui_handle.clone();
-                        let exit_flag = exit_trigger.clone();
-                        move || {
-                            if let Some(ui) = ui_weak.upgrade() {
-                                if ui.window().is_visible() {
-                                    exit_flag.store(true, Ordering::SeqCst);
-                                    let _ = ui.hide();
-                                } else {
-                                    let cfg = Config::load();
-                                    if cfg.theme.mode == "system" {
-                                        ui.set_is_dark(cfg.theme.is_dark());
-                                    }
-                                    ui.set_search_text("".into());
-                                    ui.set_is_expanded(false);
-                                    let _ = ui.show();
-                                    ui.window().with_winit_window(|w| {
-                                        w.set_visible(true);
-                                        w.focus_window();
-                                    });
-                                    ui.invoke_focus_search();
-                                    animate_window_pop_in(ui_weak.clone());
-                                }
+                    let ui_weak = ui_handle.clone();
+                    let exit_flag = exit_trigger.clone();
+                    let shown = shown_instant.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = ui_weak.upgrade() {
+                            let is_visible = ui.window().is_visible();
+                            let is_focused = is_launcher_focused(&ui);
+                            if is_visible && is_focused {
+                                exit_flag.store(true, Ordering::SeqCst);
+                                let _ = ui.hide();
+                            } else {
+                                show_and_focus_launcher(&ui, ui_weak.clone(), &shown);
                             }
                         }
                     });
@@ -711,7 +810,7 @@ fn animate_window_pop_in(ui_weak: slint::Weak<AppWindow>) {
     if let Some(ui) = ui_weak.upgrade() {
         ui.set_is_pop_visible(false);
     }
-    slint::Timer::single_shot(std::time::Duration::from_millis(32), move || {
+    slint::Timer::single_shot(std::time::Duration::from_millis(8), move || {
         if let Some(ui) = ui_weak.upgrade() {
             ui.set_is_pop_visible(true);
         }
@@ -796,8 +895,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Create main Slint Window for primary resident daemon
     let ui = AppWindow::new()?;
 
+    let shown_instant = Arc::new(std::sync::RwLock::new(Instant::now()));
+
     // 2. Start background socket listener for instant wakeup
-    start_daemon_listener(exit_trigger.clone(), ui.as_weak());
+    start_daemon_listener(exit_trigger.clone(), ui.as_weak(), shown_instant.clone());
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    start_hyprland_focus_watcher(ui.as_weak(), shown_instant.clone());
+
+    // Universal auto-hide on blur (focus loss) timer for Windows, X11, Wayland
+    let focus_check_timer = Rc::new(slint::Timer::default());
+    {
+        let ui_weak = ui.as_weak();
+        let shown = shown_instant.clone();
+        focus_check_timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(120),
+            move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    if ui.window().is_visible() && !ui.get_in_settings_mode() {
+                        let elapsed = shown.read().map(|t| t.elapsed()).unwrap_or_default();
+                        if elapsed > std::time::Duration::from_millis(300) {
+                            if !is_launcher_focused(&ui) {
+                                let _ = ui.hide();
+                                ui.set_search_text("".into());
+                                ui.set_is_expanded(false);
+                            }
+                        }
+                    }
+                }
+            },
+        );
+    }
 
     // Setup global shortcut and currency rate cache in background (non-blocking)
     std::thread::spawn(|| {
@@ -910,6 +1039,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     warm_icon_cache_chunked(icon_resolver.clone(), engine.apps.clone(), 0);
     #[cfg(not(target_os = "windows"))]
     icon_resolver.preload_icons(&engine.apps);
+
+    // Automatically re-populate initial items once background icon indexing finishes
+    // so any newly resolved icons appear on screen without waiting for user typing.
+    let refresh_timer = Rc::new(slint::Timer::default());
+    {
+        let engine = engine.clone();
+        let icon_resolver = icon_resolver.clone();
+        let current_results = current_results.clone();
+        let ui_weak = ui.as_weak();
+        let refresh_timer_clone = refresh_timer.clone();
+        let mut check_count = 0;
+        refresh_timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(80),
+            move || {
+                check_count += 1;
+                if icon_resolver.is_indexing_done() || check_count >= 25 {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        if ui.get_search_text().is_empty() && !ui.get_in_settings_mode() {
+                            let items = populate_items(&ui, &engine, &icon_resolver, "");
+                            if let Ok(mut lock) = current_results.write() {
+                                *lock = items;
+                            }
+                        }
+                    }
+                    refresh_timer_clone.stop();
+                }
+            },
+        );
+    }
 
     // 5. Connect Search Text Changed
     {
@@ -1361,8 +1520,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 11. Run Slint Event Loop
     // The window is first shown as part of `run()` itself (cold start becoming the
     // daemon); schedule the same pop-in transition for that initial appearance too.
+    if let Ok(mut lock) = shown_instant.write() {
+        *lock = Instant::now();
+    }
     animate_window_pop_in(ui.as_weak());
     ui.show()?;
+    focus_launcher_window(&ui);
     slint::run_event_loop_until_quit()?;
 
     // Cleanup socket on exit

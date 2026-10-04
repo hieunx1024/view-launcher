@@ -76,7 +76,7 @@ The compiled binary will be located at `target/release/view-launcher` (or `targe
 
 | Shortcut | Context | Action |
 | :--- | :--- | :--- |
-| `Alt + Z` / `Ctrl + Alt + Space` | Global Desktop | Toggle launcher window |
+| `Ctrl + Alt + Space` | Global Desktop | Toggle launcher window |
 | `Down` / `Up` | Search List | Navigate through search results |
 | `Enter` | Search List | Launch selected application, open file, or copy calculation |
 | `Tab` | File Search Mode | Enter selected directory in search path |
