@@ -45,7 +45,7 @@ A lightweight, high-performance desktop application and file launcher for Linux 
 Download the `.deb` package from [GitHub Releases](https://github.com/hieunx1024/view-launcher/releases/latest):
 
 ```bash
-sudo dpkg -i view-launcher_0.5.0_amd64.deb
+sudo dpkg -i view-launcher_0.5.1_amd64.deb
 ```
 
 The package installs the desktop entry and system icons. The default launcher shortcut is `Ctrl + Alt + Space`.

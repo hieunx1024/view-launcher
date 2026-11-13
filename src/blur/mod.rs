@@ -2,9 +2,9 @@ use i_slint_backend_winit::winit::window::Window;
 use std::fmt;
 
 pub mod fallback;
-#[cfg(feature = "wayland")]
+#[cfg(all(target_os = "linux", feature = "wayland"))]
 pub mod wayland_kde;
-#[cfg(feature = "x11")]
+#[cfg(all(target_os = "linux", feature = "x11"))]
 pub mod x11;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,19 +53,19 @@ impl BlurBackend for RuleRequiredBlurBackend {
     }
 }
 
-pub fn detect_blur_backend(win: &Window) -> (Box<dyn BlurBackend>, BlurStatus, String) {
-    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default().to_lowercase();
+pub fn detect_blur_backend(_win: &Window) -> (Box<dyn BlurBackend>, BlurStatus, String) {
+    let _session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default().to_lowercase();
     let current_desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase();
-    let is_wayland = session_type == "wayland" || std::env::var("WAYLAND_DISPLAY").is_ok();
-    let is_kde = current_desktop.contains("kde") || current_desktop.contains("plasma");
+    let _is_wayland = _session_type == "wayland" || std::env::var("WAYLAND_DISPLAY").is_ok();
+    let _is_kde = current_desktop.contains("kde") || current_desktop.contains("plasma");
     let is_hyprland = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() || current_desktop.contains("hyprland");
     let is_sway = std::env::var("SWAYSOCK").is_ok() || current_desktop.contains("sway");
 
     // Tier 1: X11
-    #[cfg(feature = "x11")]
-    if !is_wayland {
+    #[cfg(all(target_os = "linux", feature = "x11"))]
+    if !_is_wayland {
         let backend = x11::X11BlurBackend::new();
-        if backend.apply(win, 32).is_ok() {
+        if backend.apply(_win, 32).is_ok() {
             return (
                 Box::new(backend),
                 BlurStatus::Native,
@@ -75,10 +75,10 @@ pub fn detect_blur_backend(win: &Window) -> (Box<dyn BlurBackend>, BlurStatus, S
     }
 
     // Tier 2: Wayland KDE
-    #[cfg(feature = "wayland")]
-    if is_wayland && is_kde {
-        if let Ok(backend) = wayland_kde::WaylandKdeBlurBackend::new(win) {
-            if backend.apply(win, 32).is_ok() {
+    #[cfg(all(target_os = "linux", feature = "wayland"))]
+    if _is_wayland && _is_kde {
+        if let Ok(backend) = wayland_kde::WaylandKdeBlurBackend::new(_win) {
+            if backend.apply(_win, 32).is_ok() {
                 return (
                     Box::new(backend),
                     BlurStatus::Native,

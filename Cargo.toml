@@ -1,6 +1,6 @@
 [package]
 name = "view-launcher"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 authors = ["Hieu Nguyen <hieunx@outlook.com>"]
 description = "A minimalist, high-performance desktop app & file launcher in Rust (<5ms)"
@@ -40,6 +40,8 @@ rayon = "1.10"
 arboard = "3.4"
 serde_json = "1.0"
 raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["allow-unsafe-code"], optional = true }
 wayland-client = { version = "0.31", optional = true }
 wayland-protocols = { version = "0.32", features = ["staging", "client"], optional = true }
