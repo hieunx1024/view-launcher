@@ -43,6 +43,7 @@ pub struct LauncherItem {
     pub description: Option<String>,
     pub terminal: bool,
     pub icon: Option<String>,
+    pub(crate) desktop_categories: Option<std::sync::Arc<str>>,
 }
 
 impl LauncherItem {
@@ -63,6 +64,7 @@ impl LauncherItem {
             description,
             terminal,
             icon,
+            desktop_categories: None,
         }
     }
     pub fn get_category_tag(&self) -> &'static str {
@@ -78,6 +80,9 @@ impl LauncherItem {
             ItemType::Clipboard => "Clipboard",
             ItemType::Dmenu => "Item",
             ItemType::App => {
+                if let Some(category) = crate::apps::AppCategoryFilter::specific_label(self) {
+                    return category;
+                }
                 let lower = format!("{} {} {}", self.name.to_lowercase(), self.exec_or_path.to_lowercase(), self.icon.as_deref().unwrap_or(""));
                 if lower.contains("idea") || lower.contains("pycharm") || lower.contains("clion") || lower.contains("webstorm") || lower.contains("code") || lower.contains("studio") || lower.contains("nvim") || lower.contains("vim") {
                     "IDE"
@@ -359,6 +364,7 @@ impl LauncherEngine {
         let mut exec = String::new();
         let mut comment = None;
         let mut icon_hint = None;
+        let mut desktop_categories = None;
         let mut is_app = false;
         let mut no_display = false;
         let mut hidden = false;
@@ -408,6 +414,9 @@ impl LauncherEngine {
                         }
                         exec = cleaned_tokens.iter().map(|t| quote_arg(t)).collect::<Vec<_>>().join(" ");
                     }
+                    "Categories" if !val.is_empty() => {
+                        desktop_categories = Some(Arc::from(val));
+                    }
                     "Comment" => {
                         comment = Some(val.to_string());
                     }
@@ -437,14 +446,16 @@ impl LauncherEngine {
         }
 
         if is_app && !name.is_empty() && !exec.is_empty() && !no_display && !hidden {
-            Some(LauncherItem::new(
+            let mut item = LauncherItem::new(
                 name,
                 exec,
                 ItemType::App,
                 comment,
                 terminal,
                 icon_hint,
-            ))
+            );
+            item.desktop_categories = desktop_categories;
+            Some(item)
         } else {
             None
         }

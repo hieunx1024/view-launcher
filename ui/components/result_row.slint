@@ -1,0 +1,116 @@
+import { Theme } from "../theme.slint";
+
+export component ResultRow inherits Rectangle {
+    in property <string> title: "";
+    in property <string> subtitle: "";
+    in property <string> meta: "";
+    in property <bool> has_icon: false;
+    in property <image> icon;
+    in property <bool> selected: false;
+    callback activated();
+    callback hovered();
+
+    width: 100%;
+    height: Theme.row_height;
+    border-radius: 10px;
+    border-width: root.selected ? 0.5px : 0px;
+    border-color: root.selected ? Theme.row_selected_border : transparent;
+    background: root.selected ? Theme.row_selected_bg : (row_touch.has-hover ? Theme.row_hover_bg : transparent);
+    animate background { duration: 80ms; easing: ease-out; }
+
+    HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        padding-left: Theme.content_inset - Theme.panel_padding;
+        padding-right: Theme.content_inset - Theme.panel_padding;
+        spacing: 10px;
+
+        // 24x24 Icon with radius 6
+        icon_box := Rectangle {
+            width: 24px;
+            height: 24px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 6px;
+            clip: true;
+            background: root.has_icon ? transparent : Theme.row_icon_bg;
+
+            if (root.has_icon) : Image {
+                source: root.icon;
+                width: 24px;
+                height: 24px;
+                image-fit: contain;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            if (!root.has_icon) : Text {
+                text: "★";
+                font-size: 11px;
+                color: Theme.text_secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Title and Subtitle
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 1px;
+
+            Text {
+                text: root.title;
+                font-family: Theme.font_family;
+                font-size: 13px;
+                font-weight: 500;
+                color: Theme.text_primary;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+
+            if (root.subtitle != "") : Text {
+                text: root.subtitle;
+                font-family: Theme.font_family;
+                font-size: 10px;
+                font-weight: 400;
+                color: Theme.text_secondary;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+
+        // Trailing Meta Badge
+        if (root.meta != "") : Rectangle {
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 4px;
+            background: Theme.dark ? rgba(255, 255, 255, 0.08) : rgba(0, 0, 0, 0.05);
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 6px;
+                alignment: center;
+                Text {
+                    text: root.meta;
+                    font-family: Theme.font_family;
+                    font-size: 10px;
+                    font-weight: 500;
+                    color: Theme.text_secondary;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    row_touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => {
+            root.activated();
+        }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.move) {
+                root.hovered();
+            }
+        }
+    }
+}

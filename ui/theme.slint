@@ -1,0 +1,98 @@
+export global Theme {
+    in-out property <bool> dark: true;
+    in-out property <bool> has_blur: true;
+    in-out property <float> surface_opacity: 0.95;
+
+    // Geometry & Layout
+    out property <length> shadow_margin: 18px;
+    out property <length> pill_width: panel_width;
+    out property <length> pill_height: 48px;
+    out property <length> pill_radius: 24px;
+
+    out property <length> panel_width: 576px;
+    out property <length> panel_height: 380px;
+    out property <length> settings_height: 428px;
+    out property <length> panel_radius: 18px;
+    out property <length> panel_header_height: 48px;
+    out property <length> chips_height: 36px;
+    out property <length> row_height: 36px;
+    out property <length> panel_padding: 8px;
+    out property <length> content_inset: 16px;
+    out property <length> row_gap: 2px;
+
+    // Animations
+    out property <duration> anim_open: 180ms;
+    out property <duration> anim_expand: 220ms;
+    out property <duration> anim_row_slide: 120ms;
+
+    // Typography
+    out property <string> font_family: "Inter, SF Pro Text, Cantarell, Noto Sans, sans-serif";
+
+    // Text Colors
+    out property <color> text_primary: dark ? #F5F5F7 : #1D1D1F;
+    out property <color> text_secondary: dark ? #A1A1A6 : #6E6E73;
+    out property <color> text_placeholder: dark ? #8E8E93 : #6E6E73;
+    out property <color> text_ghost: dark ? rgba(142, 142, 147, 0.70) : rgba(110, 110, 115, 0.60);
+    out property <color> accent_blue: #0A84FF;
+    out property <color> accent_blue_text: dark ? #409CFF : #0A63D1;
+
+    // Pill Tint Brush
+    out property <brush> pill_tint: has_blur ?
+        (dark ?
+            @linear-gradient(90deg, rgba(42, 47, 58, surface_opacity) 0%, rgba(22, 26, 34, surface_opacity) 100%) :
+            @linear-gradient(90deg, rgba(255, 255, 255, surface_opacity) 0%, rgba(240, 244, 250, surface_opacity) 100%)) :
+        (dark ?
+            @linear-gradient(180deg, rgba(51, 61, 77, surface_opacity) 0%, rgba(30, 38, 51, surface_opacity) 52%, rgba(21, 27, 38, surface_opacity) 100%) :
+            @linear-gradient(180deg, rgba(255, 255, 255, surface_opacity) 0%, rgba(240, 246, 253, surface_opacity) 52%, rgba(222, 233, 248, surface_opacity) 100%));
+
+    // Expanded Panel Tint Brush
+    out property <brush> panel_tint: has_blur ?
+        (dark ?
+            @linear-gradient(180deg, rgba(42, 47, 58, surface_opacity) 0%, rgba(22, 26, 34, surface_opacity) 100%) :
+            @linear-gradient(180deg, rgba(255, 255, 255, surface_opacity) 0%, rgba(240, 244, 250, surface_opacity) 100%)) :
+        (dark ?
+            @linear-gradient(180deg, rgba(43, 53, 69, surface_opacity) 0%, rgba(27, 34, 46, surface_opacity) 44%, rgba(18, 23, 33, surface_opacity) 100%) :
+            @linear-gradient(180deg, rgba(255, 255, 255, surface_opacity) 0%, rgba(239, 245, 253, surface_opacity) 44%, rgba(225, 235, 249, surface_opacity) 100%));
+
+    // Rim Outer Gradient (Specular rim)
+    out property <brush> rim_outer_gradient: dark ?
+        @linear-gradient(180deg, rgba(255, 255, 255, 0.40) 0%, rgba(255, 255, 255, 0.05) 100%) :
+        @linear-gradient(180deg, rgba(255, 255, 255, 0.90) 0%, rgba(200, 200, 210, 0.50) 100%);
+
+    // Inner Specular Rim Inset Color
+    out property <color> rim_inner_bg: dark ? rgba(255, 255, 255, 0.03) : rgba(255, 255, 255, 0.20);
+
+    // Inner Top Highlight (1px line, 60% opacity)
+    out property <color> inner_top_highlight: dark ? rgba(255, 255, 255, 0.40) : rgba(255, 255, 255, 0.60);
+
+    // Top Specular Overlay (Top 40%)
+    out property <brush> specular_overlay: dark ?
+        @linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.0) 100%) :
+        @linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.0) 100%);
+
+    // Bloom Colors (Expanded panel)
+    out property <color> bloom_bottom_left: dark ? rgba(59, 130, 246, 0.22) : rgba(124, 196, 255, 0.28);
+    out property <color> bloom_top_left: dark ? rgba(96, 165, 250, 0.12) : rgba(255, 233, 176, 0.18);
+
+    // Drop Shadow Properties
+    out property <color> shadow_color_pill: dark ? rgba(0, 0, 0, 0.31) : rgba(18, 37, 65, 0.25);
+    out property <color> shadow_color_panel: dark ? rgba(0, 0, 0, 0.39) : rgba(14, 33, 62, 0.32);
+
+    // Chips
+    out property <length> chip_height: 24px;
+    out property <length> chip_radius: 12px;
+    out property <length> chip_padding_x: 10px;
+    out property <length> chip_gap: 6px;
+    out property <color> chip_fill: dark ? rgba(255, 255, 255, 0.10) : rgba(0, 0, 0, 0.06);
+    out property <color> chip_fill_hover: dark ? rgba(255, 255, 255, 0.18) : rgba(0, 0, 0, 0.12);
+    out property <color> chip_active_fill: rgba(10, 132, 255, 0.18);
+    out property <color> chip_border: dark ? rgba(255, 255, 255, 0.20) : rgba(0, 0, 0, 0.15);
+    out property <color> chip_text: dark ? #F5F5F7 : #1D1D1F;
+    out property <color> chip_active_text: dark ? #409CFF : #0A63D1;
+
+    // Result Row
+    out property <color> row_selected_bg: dark ? rgba(255, 255, 255, 0.14) : rgba(0, 0, 0, 0.08);
+    out property <color> row_selected_border: dark ? rgba(255, 255, 255, 0.30) : rgba(0, 0, 0, 0.15);
+    out property <color> row_hover_bg: dark ? rgba(255, 255, 255, 0.08) : rgba(0, 0, 0, 0.04);
+    out property <color> row_icon_bg: dark ? rgba(255, 255, 255, 0.08) : rgba(0, 0, 0, 0.05);
+}

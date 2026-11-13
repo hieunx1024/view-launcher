@@ -26,20 +26,24 @@ pub struct ThemeConfig {
     pub highlight_color: String,
     #[serde(default = "default_true")]
     pub show_icons: Option<bool>,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub show_status_bar: Option<bool>,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub compact_empty_view: Option<bool>,
+    #[serde(default = "default_view_style")]
+    pub view_style: String,
 }
 
+fn default_view_style() -> String { "liquid_glass".to_string() }
 fn default_theme_mode() -> String { "dark".to_string() }
 fn default_opacity() -> f32 { 0.95 }
-fn default_query_color() -> String { "#7aa2f7".to_string() }
-fn default_selection_bg() -> String { "#283457".to_string() }
-fn default_selection_fg() -> String { "#ffffff".to_string() }
-fn default_border_color() -> String { "#3b4261".to_string() }
-fn default_highlight_color() -> String { "#ff9e64".to_string() }
+fn default_query_color() -> String { "#dedcd1".to_string() }
+fn default_selection_bg() -> String { "#2d2d2d".to_string() }
+fn default_selection_fg() -> String { "#faf9f5".to_string() }
+fn default_border_color() -> String { "#2d2d2d".to_string() }
+fn default_highlight_color() -> String { "#dedcd1".to_string() }
 fn default_true() -> Option<bool> { Some(true) }
+fn default_false() -> Option<bool> { Some(false) }
 
 impl ThemeConfig {
     pub fn is_dark(&self) -> bool {
@@ -189,8 +193,9 @@ impl Default for ThemeConfig {
             border_color: default_border_color(),
             highlight_color: default_highlight_color(),
             show_icons: Some(true),
-            show_status_bar: Some(true),
-            compact_empty_view: Some(true),
+            show_status_bar: Some(false),
+            compact_empty_view: Some(false),
+            view_style: default_view_style(),
         }
     }
 }
@@ -478,30 +483,28 @@ pub fn setup_global_shortcut() {
                 }
             }
         } else if is_sway {
-            if let Some(mut sway_cfg) = dirs::config_dir() {
-                sway_cfg.push("sway");
-                sway_cfg.push("config");
-                if sway_cfg.exists() {
-                    if let Ok(content) = fs::read_to_string(&sway_cfg) {
-                        let mut new_content = content.clone();
-                        let mut modified = false;
-                        if new_content.contains("bindsym Alt+z exec view-launcher") {
-                            new_content = new_content.replace(
-                                "bindsym Alt+z exec view-launcher",
-                                "bindsym Ctrl+Alt+space exec view-launcher",
-                            );
-                            modified = true;
-                        } else if new_content.contains("bindsym Alt+Z exec view-launcher") {
-                            new_content = new_content.replace(
-                                "bindsym Alt+Z exec view-launcher",
-                                "bindsym Ctrl+Alt+space exec view-launcher",
-                            );
-                            modified = true;
-                        } else if !new_content.contains("exec view-launcher") {
-                            new_content.push_str("\nbindsym Ctrl+Alt+space exec view-launcher\n");
-                            modified = true;
+            if let Some(mut sway_dir) = dirs::config_dir() {
+                sway_dir.push("sway");
+                // Check if already configured anywhere in ~/.config/sway/ (including conf.d/)
+                let mut already_configured = false;
+                if let Ok(entries) = walkdir::WalkDir::new(&sway_dir).into_iter().collect::<Result<Vec<_>, _>>() {
+                    for entry in entries {
+                        if entry.file_type().is_file() {
+                            if let Ok(c) = fs::read_to_string(entry.path()) {
+                                if c.contains("exec view-launcher") {
+                                    already_configured = true;
+                                    break;
+                                }
+                            }
                         }
-                        if modified {
+                    }
+                }
+                if !already_configured {
+                    let sway_cfg = sway_dir.join("config");
+                    if sway_cfg.exists() {
+                        if let Ok(content) = fs::read_to_string(&sway_cfg) {
+                            let mut new_content = content.clone();
+                            new_content.push_str("\nbindsym Ctrl+Alt+space exec view-launcher\n");
                             let _ = fs::write(&sway_cfg, new_content);
                             let _ = std::process::Command::new("swaymsg").arg("reload").status();
                         }

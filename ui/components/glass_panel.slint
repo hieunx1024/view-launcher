@@ -1,0 +1,77 @@
+import { Theme } from "../theme.slint";
+
+export component GlassPanel inherits Rectangle {
+    in-out property <length> panel_radius: Theme.pill_radius;
+    in-out property <bool> is_expanded: false;
+
+    width: 100%;
+    height: 100%;
+    background: transparent;
+
+    // Layer 1: Outer Specular Rim
+    rim_outer := Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: root.panel_radius;
+        border-width: 1px;
+        border-color: Theme.rim_outer_gradient;
+
+        // Layer 2: Main Glass Surface (inset 1px)
+        glass_surface := Rectangle {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            border-radius: Math.max(0px, root.panel_radius - 1px);
+            background: root.is_expanded ? Theme.panel_tint : Theme.pill_tint;
+            clip: true;
+
+            // Local reflections give the surface depth even without compositor blur.
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
+
+                // Bottom-left blue bloom
+                Rectangle {
+                    x: -60px;
+                    y: parent.height - (root.is_expanded ? 120px : 24px);
+                    width: 220px;
+                    height: 180px;
+                    border-radius: 90px;
+                    background: @radial-gradient(circle, Theme.bloom_bottom_left 0%, transparent 100%);
+                }
+
+                // Top-left reflection
+                Rectangle {
+                    x: -40px;
+                    y: -40px;
+                    width: 180px;
+                    height: 140px;
+                    border-radius: 70px;
+                    background: @radial-gradient(circle, Theme.bloom_top_left 0%, transparent 100%);
+                }
+            }
+
+            // Layer 4: Specular Overlay on Top 40%
+            specular := Rectangle {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: parent.height * 0.40;
+                background: Theme.specular_overlay;
+            }
+
+            // Layer 5: Inner Top Highlight (1px line, inset 12px left/right)
+            Rectangle {
+                x: 12px;
+                y: 0px;
+                width: parent.width - 24px;
+                height: 1px;
+                background: @linear-gradient(90deg, transparent 0%, Theme.inner_top_highlight 22%, Theme.inner_top_highlight 55%, transparent 100%);
+            }
+
+        }
+    }
+}

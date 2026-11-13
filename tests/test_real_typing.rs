@@ -47,6 +47,7 @@ fn test_real_typing_simulation() {
         let icon_resolver = icon_resolver.clone();
         let current_results = current_results.clone();
         let ui_weak = ui.as_weak();
+    ui.set_cfg_view_style("liquid_glass".into());
 
         ui.on_search_text_changed(move |text| {
             if let Some(ui) = ui_weak.upgrade() {

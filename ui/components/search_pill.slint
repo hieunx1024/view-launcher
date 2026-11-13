@@ -1,0 +1,151 @@
+import { Theme } from "../theme.slint";
+
+export component SearchPillInput inherits Rectangle {
+    in-out property <string> text: "";
+    in property <string> placeholder: "Spotlight Search";
+    in property <string> ghost_suffix: "";
+    in property <image> search_icon;
+    out property <bool> has_focus: input.has-focus;
+    forward-focus: input;
+
+    callback edited(string);
+    callback accepted(string);
+    callback tab_pressed();
+    callback backspace_pressed() -> bool;
+    callback escape_pressed();
+    callback settings_pressed();
+    callback up_pressed();
+    callback down_pressed();
+
+    public function focus_input() {
+        input.focus();
+    }
+
+    public function select_all() {
+        input.select-all();
+    }
+
+    height: 100%;
+    background: transparent;
+
+    HorizontalLayout {
+        padding-left: Theme.content_inset;
+        padding-right: Theme.content_inset;
+        spacing: 10px;
+
+        // Magnifier 16px with click-to-focus
+        VerticalLayout {
+            alignment: center;
+            width: 16px;
+
+            Rectangle {
+                width: 16px;
+                height: 16px;
+
+                Image {
+                    source: root.search_icon;
+                    width: 16px;
+                    height: 16px;
+                    colorize: Theme.text_secondary;
+                    image-fit: contain;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    clicked => {
+                        input.focus();
+                    }
+                }
+            }
+        }
+
+        // Input Field & Placeholder & Ghost Autocomplete
+        input_container := Rectangle {
+            horizontal-stretch: 1;
+            clip: true;
+
+            // Placeholder Text
+            if (root.text == "") : Text {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
+                text: root.placeholder;
+                font-family: Theme.font_family;
+                font-size: 15px;
+                font-weight: 400;
+                color: Theme.text_placeholder;
+                vertical-alignment: center;
+            }
+
+            // Ghost Autocomplete Suffix
+            if (root.text != "" && root.ghost_suffix != "") : Text {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
+                text: root.text + root.ghost_suffix;
+                font-family: Theme.font_family;
+                font-size: 15px;
+                font-weight: 400;
+                color: Theme.text_ghost;
+                vertical-alignment: center;
+            }
+
+            // Actual TextInput
+            input := TextInput {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
+                text <=> root.text;
+                font-family: Theme.font_family;
+                font-size: 15px;
+                font-weight: 400;
+                color: Theme.text_primary;
+                selection-background-color: Theme.accent_blue;
+                selection-foreground-color: #FFFFFF;
+                vertical-alignment: center;
+                single-line: true;
+
+                edited => {
+                    root.edited(self.text);
+                }
+
+                accepted => {
+                    root.accepted(self.text);
+                }
+
+                key-pressed(event) => {
+                    if (event.modifiers.control && event.text == ",") {
+                        root.settings_pressed();
+                        return accept;
+                    }
+                    if (event.text == Key.UpArrow) {
+                        root.up_pressed();
+                        return accept;
+                    }
+                    if (event.text == Key.DownArrow) {
+                        root.down_pressed();
+                        return accept;
+                    }
+                    if (event.text == Key.Tab) {
+                        root.tab_pressed();
+                        return accept;
+                    }
+                    if (event.text == Key.Escape) {
+                        root.escape_pressed();
+                        return accept;
+                    }
+                    if (event.text == Key.Backspace && self.text == "") {
+                        if (root.backspace_pressed()) {
+                            return accept;
+                        }
+                    }
+                    reject
+                }
+            }
+        }
+    }
+}

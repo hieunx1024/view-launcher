@@ -24,17 +24,31 @@ A lightweight, high-performance desktop application and file launcher for Linux 
 
 ---
 
+## Screenshots
+
+| Application search | File and folder search |
+| --- | --- |
+| ![Searching for Firefox in Liquid Glass](assets/screenshots/app-search.png) | ![Searching for a sample project folder with @f](assets/screenshots/file-search.png) |
+
+| Calculator and unit conversion | Emoji picker |
+| --- | --- |
+| ![Converting 25 kilometers to miles](assets/screenshots/calculator.png) | ![Searching for heart emoji with @emoji](assets/screenshots/emoji-picker.png) |
+
+### Spotlight Preferences
+
+![Preferences for startup, appearance, and search](assets/screenshots/preferences.png)
+
 ## Installation
 
 ### Linux (Ubuntu / Debian)
 
-Download the latest `.deb` package from GitHub Releases:
+Download the `.deb` package from [GitHub Releases](https://github.com/hieunx1024/view-launcher/releases/latest):
 
 ```bash
-sudo dpkg -i view-launcher_0.2.0_amd64.deb
+sudo dpkg -i view-launcher_0.5.0_amd64.deb
 ```
 
-The package automatically installs the desktop entry, system icons, and registers the global hotkey (`Alt + Z`) on GNOME desktop environments.
+The package installs the desktop entry and system icons. The default launcher shortcut is `Ctrl + Alt + Space`.
 
 ### Windows
 
@@ -101,13 +115,14 @@ Configuration is saved in standard platform directories:
 autostart = false
 
 [theme]
+view_style = "liquid_glass" # "liquid_glass" (Spotlight Tahoe) or "classic"
 query_color = "#7aa2f7"
 selection_bg = "#262f4d"
 selection_fg = "#ffffff"
 border_color = "#3d59a1"
 highlight_color = "#7dcfff"
 show_icons = true
-show_status_bar = true
+show_status_bar = false
 
 [search]
 max_results = 7
@@ -129,6 +144,47 @@ pinned = ["Firefox", "Visual Studio Code", "Terminal"]
 hidden = ["Help", "Software Updater"]
 extra_desktop_paths = []
 ```
+
+---
+
+## Spotlight "Liquid Glass" (macOS Tahoe Look) & Compositor Blur
+
+View Launcher features an ultra-responsive, photorealistic **Liquid Glass** view style modeled after macOS Spotlight Tahoe, with runtime blur detection across 4 tiers:
+
+### 1. Compositor Blur Setup
+
+#### Hyprland (Tier 3)
+Add these rules to `~/.config/hypr/hyprland.conf`:
+```ini
+windowrulev2 = blur, class:^(view-launcher)$
+windowrulev2 = ignorealpha 0.2, class:^(view-launcher)$
+windowrulev2 = float, class:^(view-launcher)$
+windowrulev2 = center, class:^(view-launcher)$
+windowrulev2 = noshadow, class:^(view-launcher)$
+```
+
+#### SwayFX (Tier 3)
+Add to `~/.config/sway/config`:
+```ini
+for_window [app_id="view-launcher"] blur enable, floating enable
+```
+
+#### KDE Plasma (X11 & Wayland)
+- **X11 (Tier 1)**: Native `_KDE_NET_WM_BLUR_BEHIND_REGION` atom set dynamically on the visible panel geometry, animating smoothly at 60Hz.
+- **Wayland (Tier 2)**: Automatic binding via `ext-background-effect-v1` or `org_kde_kwin_blur_manager`.
+
+#### GNOME / Mutter (Tier 4 Fallback)
+Automatic graceful fallback: raises tint opacity to 90% (light) / 93% (dark) with enhanced specular rim and bloom highlights for a clean glass aesthetic without compositor blur.
+
+### 2. Tunable Visual Knobs
+
+All design tokens are centralized in [`ui/theme.slint`](ui/theme.slint):
+- `pill_width` (470px) / `pill_height` (40px) / `pill_radius` (20px)
+- `panel_width` (576px) / `panel_radius` (18px) / `shadow_margin` (18px)
+- `anim_open` (180ms) / `anim_expand` (220ms) / `anim_row_slide` (120ms)
+- `pill_tint` / `panel_tint` (multi-stop RGBA gradients for blur & fallback modes)
+- `bloom_bottom_left` (`#7CC4FF@28%`) & `bloom_top_left` (`#FFE9B0@18%`)
+- `chip_height` (24px) / `chip_radius` (12px) / `row_height` (36px)
 
 ---
 

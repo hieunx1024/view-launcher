@@ -1,0 +1,240 @@
+import { Theme } from "theme.slint";
+import { SearchPillInput } from "components/search_pill.slint";
+import { GlassPanel } from "components/glass_panel.slint";
+import { CategoryChip } from "components/chip.slint";
+import { ResultRow } from "components/result_row.slint";
+
+export struct LauncherItemData {
+    name: string,
+    category: string,
+    item_type: string,
+    has_icon: bool,
+    icon: image,
+    exec_or_path: string,
+}
+
+export component LiquidGlassLauncher inherits Rectangle {
+    forward-focus: pill_input;
+    in-out property <string> search_text: "";
+    in-out property <int> selected_index: 0;
+    in-out property <length> scroll_viewport_y: 0px;
+    out property <length> results_height: results_scroll.height;
+    in property <[LauncherItemData]> items: [];
+    in property <bool> has_results: true;
+    in property <image> search_icon;
+    in property <image> settings_icon;
+    in property <bool> is_expanded: false;
+    in-out property <string> active_category: "";
+    in property <bool> categories_enabled: true;
+    property <[string]> categories: ["Calendar", "Applications", "Actions", "Messages", "Help", "Mail", "Settings", "Contacts"];
+    in property <bool> is_pop_visible: true;
+
+    callback search_text_changed(string);
+    callback item_activated(int);
+    callback move_up();
+    callback move_down();
+    callback tab_pressed();
+    callback backspace_pressed() -> bool;
+    callback close_launcher();
+    callback open_settings();
+    callback start_window_drag();
+    callback chip_selected(string);
+
+    public function focus_search() {
+        pill_input.focus_input();
+    }
+
+    property <int> category_index: -1;
+    changed active_category => {
+        if (root.active_category == "") { root.category_index = -1; }
+    }
+
+    function select_category(index: int) {
+        root.category_index = index;
+        root.active_category = index < 0 ? "" : root.categories[index];
+        root.chip_selected(root.active_category);
+    }
+
+    function cycle_chip() {
+        root.select_category(root.category_index + 1 == root.categories.length ? -1 : root.category_index + 1);
+    }
+
+    width: 100%;
+    background: transparent;
+    border-radius: root.is_expanded ? Theme.panel_radius : Theme.pill_radius;
+    clip: true;
+    opacity: root.is_pop_visible ? 1.0 : 0.0;
+    animate opacity { duration: root.is_pop_visible ? 160ms : 0ms; easing: ease-out; }
+    animate border-radius { duration: Theme.anim_expand; easing: cubic-bezier(0.2, 0.8, 0.2, 1.0); }
+
+    GlassPanel {
+        panel_radius: root.border-radius;
+        is_expanded: root.is_expanded;
+    }
+
+    // Search Header (Fixed 48px)
+    header_box := Rectangle {
+        width: parent.width;
+        height: Theme.panel_header_height;
+        x: 0px;
+        y: 0px;
+
+        HorizontalLayout {
+            pill_input := SearchPillInput {
+                horizontal-stretch: 1;
+                text <=> root.search_text;
+                search_icon: root.search_icon;
+                placeholder: "Spotlight Search";
+
+                edited(txt) => {
+                    root.search_text_changed(txt);
+                }
+                accepted(txt) => {
+                    root.item_activated(root.selected_index);
+                }
+                up_pressed => {
+                    root.move_up();
+                }
+                down_pressed => {
+                    root.move_down();
+                }
+                tab_pressed => {
+                    if (chips_bar.visible) {
+                        root.cycle_chip();
+                    } else {
+                        root.tab_pressed();
+                    }
+                }
+                backspace_pressed => {
+                    return root.backspace_pressed();
+                }
+                settings_pressed => {
+                    root.open_settings();
+                }
+                escape_pressed => {
+                    root.close_launcher();
+                }
+            }
+
+            // Settings Icon button when expanded
+            if (root.is_expanded) : Rectangle {
+                    width: 26px + Theme.content_inset;
+                height: 100%;
+                VerticalLayout {
+                        padding-right: Theme.content_inset;
+                    alignment: center;
+                    Rectangle {
+                        width: 26px;
+                        height: 26px;
+                        border-radius: 6px;
+                        background: settings_touch.has-hover ?
+                            (Theme.dark ? rgba(255, 255, 255, 0.12) : rgba(0, 0, 0, 0.08)) :
+                            transparent;
+                        animate background { duration: 100ms; }
+
+                        Image {
+                            source: root.settings_icon;
+                            width: 16px;
+                            height: 16px;
+                            colorize: Theme.text_secondary;
+                            image-fit: contain;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        settings_touch := TouchArea {
+                            clicked => {
+                                root.open_settings();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Chips Bar (Fixed 36px, visible when expanded)
+    chips_bar := Rectangle {
+        visible: root.is_expanded && root.categories_enabled;
+        x: 0px;
+        y: header_box.height;
+        width: parent.width;
+        height: self.visible ? Theme.chips_height : 0px;
+        clip: true;
+
+        HorizontalLayout {
+            width: 100%;
+            height: 100%;
+            padding-left: Theme.content_inset;
+            padding-right: Theme.content_inset;
+            spacing: Theme.chip_gap;
+            alignment: start;
+
+            for category[index] in root.categories: CategoryChip {
+                text: category;
+                active: root.active_category == category;
+                clicked => {
+                    root.select_category(root.active_category == category ? -1 : index);
+                    root.focus_search();
+                }
+            }
+        }
+    }
+
+    // Results Container (Fills remaining height when expanded)
+    results_container := Rectangle {
+        visible: root.is_expanded;
+        x: 0px;
+        y: chips_bar.y + chips_bar.height;
+        width: parent.width;
+        height: Math.max(0px, parent.height - self.y);
+        clip: true;
+
+        results_scroll := Flickable {
+            width: 100%;
+            height: 100%;
+            visible: root.has_results;
+            viewport-y <=> root.scroll_viewport_y;
+            viewport-height: Math.max(self.height, root.items.length * (Theme.row_height + Theme.row_gap)
+                - Theme.row_gap + 2 * Theme.panel_padding);
+
+            VerticalLayout {
+                width: 100%;
+                padding: Theme.panel_padding;
+                spacing: Theme.row_gap;
+                alignment: start;
+
+                for item[i] in root.items: ResultRow {
+                    title: item.name;
+                    subtitle: item.exec_or_path;
+                    meta: item.category;
+                    has_icon: item.has_icon;
+                    icon: item.icon;
+                    selected: i == root.selected_index;
+
+                    activated => {
+                        root.selected_index = i;
+                        root.item_activated(i);
+                    }
+                    hovered => {
+                        root.selected_index = i;
+                    }
+                }
+            }
+        }
+
+        empty_state := Rectangle {
+            visible: !root.has_results;
+            width: 100%;
+            height: 100%;
+            Text {
+                text: "No matching results";
+                font-family: Theme.font_family;
+                font-size: 13px;
+                color: Theme.text_secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

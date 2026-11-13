@@ -1,0 +1,40 @@
+import { Theme } from "../theme.slint";
+
+export component CategoryChip inherits Rectangle {
+    in property <string> text: "Applications";
+    in property <bool> active: false;
+    callback clicked();
+
+    height: Theme.chip_height;
+    width: chip_txt.preferred-width + 2 * Theme.chip_padding_x + 2px;
+    border-radius: Theme.chip_radius;
+    border-width: 0.5px;
+    border-color: root.active ? transparent : Theme.chip_border;
+    background: root.active ? Theme.chip_active_fill : (touch.has-hover ? Theme.chip_fill_hover : Theme.chip_fill);
+    animate background { duration: 120ms; easing: ease-out; }
+
+    HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        padding-left: Theme.chip_padding_x;
+        padding-right: Theme.chip_padding_x;
+        alignment: center;
+
+        chip_txt := Text {
+            text: root.text;
+            font-family: Theme.font_family;
+            font-size: 11px;
+            font-weight: 500;
+            color: root.active ? Theme.chip_active_text : Theme.chip_text;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => {
+            root.clicked();
+        }
+    }
+}

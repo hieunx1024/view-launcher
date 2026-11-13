@@ -79,6 +79,64 @@ fn is_launcher_focused(ui: &AppWindow) -> bool {
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
+fn is_sway_launcher_focused(sway_sock: &str) -> bool {
+    sway_ipc_query(sway_sock, 4).is_some_and(|tree| check_node_focused(&tree))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn sway_ipc_query(socket: &str, request_type: u32) -> Option<serde_json::Value> {
+    let mut stream = UnixStream::connect(socket).ok()?;
+    stream.set_read_timeout(Some(Duration::from_millis(40))).ok()?;
+    stream.set_write_timeout(Some(Duration::from_millis(40))).ok()?;
+    let mut request = *b"i3-ipc\0\0\0\0\0\0\0\0";
+    request[10..].copy_from_slice(&request_type.to_le_bytes());
+    stream.write_all(&request).ok()?;
+    let mut header = [0u8; 14];
+    stream.read_exact(&mut header).ok()?;
+    let len = u32::from_le_bytes(header[6..10].try_into().ok()?) as usize;
+    let mut payload = vec![0; len];
+    stream.read_exact(&mut payload).ok()?;
+    serde_json::from_slice(&payload).ok()
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn check_node_focused(val: &serde_json::Value) -> bool {
+    if val.get("focused").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if let Some(app_id) = val.get("app_id").and_then(|v| v.as_str()) {
+            return app_id == "view-launcher";
+        }
+        return false;
+    }
+    if let Some(nodes) = val.get("nodes").and_then(|v| v.as_array()) {
+        for n in nodes {
+            if check_node_focused(n) {
+                return true;
+            }
+        }
+    }
+    if let Some(floating) = val.get("floating_nodes").and_then(|v| v.as_array()) {
+        for n in floating {
+            if check_node_focused(n) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn sway_launcher_node(node: &serde_json::Value) -> Option<&serde_json::Value> {
+    if node["app_id"].as_str() == Some("view-launcher") {
+        return Some(node);
+    }
+    ["nodes", "floating_nodes"]
+        .iter()
+        .filter_map(|key| node[*key].as_array())
+        .flatten()
+        .find_map(sway_launcher_node)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
 fn is_launcher_focused(ui: &AppWindow) -> bool {
     // 1. If running under Hyprland, query Hyprland IPC in <0.05ms
     if let (Ok(runtime_dir), Ok(sig)) = (std::env::var("XDG_RUNTIME_DIR"), std::env::var("HYPRLAND_INSTANCE_SIGNATURE")) {
@@ -97,13 +155,38 @@ fn is_launcher_focused(ui: &AppWindow) -> bool {
         }
     }
 
-    // 2. Fallback to winit focus status
+    // 2. If running under Sway, query Sway IPC tree directly (<0.6ms)
+    if let Ok(sway_sock) = std::env::var("SWAYSOCK") {
+        return is_sway_launcher_focused(&sway_sock);
+    }
+
+    // 3. Fallback to winit focus status
     ui.window().with_winit_window(|w| w.has_focus()).unwrap_or(false)
 }
 
 #[cfg(not(any(target_os = "windows", all(unix, not(target_os = "macos")))))]
 fn is_launcher_focused(ui: &AppWindow) -> bool {
     ui.window().with_winit_window(|w| w.has_focus()).unwrap_or(false)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn send_sway_ipc_command(cmd: &str) {
+    if let Ok(sway_sock) = std::env::var("SWAYSOCK") {
+        if let Ok(mut stream) = UnixStream::connect(&sway_sock) {
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(30)));
+            let _ = stream.set_read_timeout(Some(Duration::from_millis(30)));
+            let mut msg = Vec::with_capacity(14 + cmd.len());
+            msg.extend_from_slice(b"i3-ipc");
+            msg.extend_from_slice(&(cmd.len() as u32).to_le_bytes());
+            msg.extend_from_slice(&0u32.to_le_bytes()); // TYPE 0 = RUN_COMMAND
+            msg.extend_from_slice(cmd.as_bytes());
+            if stream.write_all(&msg).is_ok() {
+                // Keep the connection open until Sway processes the command.
+                let mut header = [0; 14];
+                let _ = stream.read_exact(&mut header);
+            }
+        }
+    }
 }
 
 fn focus_launcher_window(ui: &AppWindow) {
@@ -133,12 +216,80 @@ fn focus_launcher_window(ui: &AppWindow) {
                 let _ = stream.set_write_timeout(Some(Duration::from_millis(50)));
                 let _ = stream.write_all(b"dispatch focuswindow title:^View Launcher$");
             }
-        } else if std::env::var("SWAYSOCK").is_ok() {
-            let _ = std::process::Command::new("swaymsg")
-                .args(&["[app_id=\"view-launcher\"] focus"])
-                .status();
+        }
+        send_sway_ipc_command("[app_id=\"view-launcher\"] focus");
+    }
+}
+
+fn resize_window_for_state(ui: &AppWindow) {
+    let width = ui.get_launcher_width();
+    let height = ui.get_launcher_height();
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if ui.window().is_visible() {
+        if let Some(()) = resize_sway_launcher(width as i32, height as i32) {
+            return;
         }
     }
+
+    ui.window().set_size(slint::LogicalSize::new(width, height));
+    ui.window().with_winit_window(move |winit_window| {
+        let _ = winit_window.request_inner_size(i_slint_backend_winit::winit::dpi::LogicalSize::new(width, height));
+    });
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        send_sway_ipc_command(&format!("[title=\"^View Launcher$\"] resize set {} px {} px", width as i32, height as i32));
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn resize_sway_launcher(width: i32, height: i32) -> Option<()> {
+    let socket = std::env::var("SWAYSOCK").ok()?;
+    let tree = sway_ipc_query(&socket, 4)?;
+    let node = sway_launcher_node(&tree)?;
+    let id = node["id"].as_i64()?;
+    let rect = &node["rect"];
+    let x = rect["x"].as_i64()?;
+    let y = rect["y"].as_i64()?;
+    let geometry = &node["geometry"];
+    if geometry["width"].as_i64() != Some(i64::from(width))
+        || geometry["height"].as_i64() != Some(i64::from(height))
+    {
+        // Sway resizes floating windows around their center. Restore the top-left
+        // in the same IPC command so the search field stays where the user typed.
+        send_sway_ipc_command(&format!(
+            "[con_id={id}] resize set {width} px {height} px, move absolute position {x} px {y} px",
+        ));
+    }
+    Some(())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn launcher_is_placed_on_sway(ui: &AppWindow) -> Option<bool> {
+    if !ui.window().is_visible() {
+        return None;
+    }
+    let socket = std::env::var("SWAYSOCK").ok()?;
+    let tree = sway_ipc_query(&socket, 4)?;
+    let node = sway_launcher_node(&tree)?;
+    let id = node["id"].as_i64()?;
+    let workspaces = sway_ipc_query(&socket, 1)?;
+    let workspace = workspaces.as_array()?.iter().find(|ws| ws["focused"].as_bool() == Some(true))?;
+    let workspace_rect = &workspace["rect"];
+    let width = workspace_rect["width"].as_i64()?;
+    let height = workspace_rect["height"].as_i64()?;
+    let x = workspace_rect["x"].as_i64()?
+        + (width - i64::from(ui.get_launcher_width() as i32)).max(0) / 2;
+    let y = workspace_rect["y"].as_i64()? + height * 15 / 100;
+    let rect = &node["rect"];
+    let positioned = rect["x"].as_i64() == Some(x) && rect["y"].as_i64() == Some(y);
+    if !positioned {
+        send_sway_ipc_command(&format!(
+            "[con_id={id}] floating enable, move absolute position {x} px {y} px, focus",
+        ));
+    }
+    Some(positioned)
 }
 
 fn show_and_focus_launcher(
@@ -146,19 +297,33 @@ fn show_and_focus_launcher(
     ui_weak: slint::Weak<AppWindow>,
     shown_instant: &Arc<std::sync::RwLock<Instant>>,
 ) {
+    let was_visible = ui.window().is_visible();
     let cfg = Config::load();
-    if cfg.theme.mode == "system" {
-        ui.set_is_dark(cfg.theme.is_dark());
-    }
+    ui.set_is_dark(cfg.theme.is_dark());
+    ui.set_cfg_compact_empty(cfg.theme.compact_empty_view.unwrap_or(false));
+    ui.set_cfg_view_style(cfg.theme.view_style.clone().into());
     ui.set_search_text("".into());
+    ui.set_active_category("".into());
     ui.set_is_expanded(false);
+    ui.set_selected_index(0);
+    ui.set_scroll_viewport_y(0.0);
+    resize_window_for_state(ui);
+    ui.invoke_search_text_changed("".into());
     if let Ok(mut lock) = shown_instant.write() {
         *lock = Instant::now();
+    }
+    if !was_visible {
+        animate_window_pop_in(ui_weak.clone());
     }
     let _ = ui.show();
     focus_launcher_window(ui);
     ui.invoke_focus_search();
-    animate_window_pop_in(ui_weak);
+    let ui_w = ui_weak.clone();
+    slint::Timer::single_shot(std::time::Duration::from_millis(30), move || {
+        if let Some(ui) = ui_w.upgrade() {
+            ui.invoke_focus_search();
+        }
+    });
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -210,9 +375,9 @@ fn start_daemon_listener(
         thread::spawn(move || {
             for stream in listener.incoming() {
                 if let Ok(mut stream) = stream {
-                    let mut buf = [0u8; 8];
-                    let _ = stream.read(&mut buf);
-                    let cmd = String::from_utf8_lossy(&buf);
+                    let mut buf = [0u8; 512];
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    let cmd = String::from_utf8_lossy(&buf[..n]);
 
                     if cmd.starts_with("quit") {
                         let _ = std::fs::remove_file(&path_clone);
@@ -220,6 +385,22 @@ fn start_daemon_listener(
                             std::process::exit(0);
                         });
                         break;
+                    }
+
+                    if let Some(query) = cmd.strip_prefix("query:") {
+                        let query_str = query.trim().to_string();
+                        let ui_weak = ui_handle.clone();
+                        let shown = shown_instant.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(ui) = ui_weak.upgrade() {
+                                show_and_focus_launcher(&ui, ui_weak.clone(), &shown);
+                                ui.set_search_text(query_str.clone().into());
+                                ui.set_is_expanded(!query_str.is_empty());
+                                resize_window_for_state(&ui);
+                                ui.invoke_search_text_changed(query_str.into());
+                            }
+                        });
+                        continue;
                     }
 
                     let ui_weak = ui_handle.clone();
@@ -407,7 +588,28 @@ fn populate_items(
     ui.set_is_file_mode(is_file_mode);
     ui.set_is_shell_mode(is_shell_mode);
 
-    let results = engine.search(query);
+    use view_launcher::apps::AppCategoryFilter;
+    let is_category_search = !trimmed.starts_with(['@', '!', ':'])
+        && trimmed != "?"
+        && engine.resolve_path_search(trimmed).is_none();
+    ui.set_categories_enabled(is_category_search);
+    let filter = if ui.get_cfg_view_style() == "liquid_glass" && is_category_search {
+        AppCategoryFilter::from_chip_name(&ui.get_active_category())
+    } else {
+        AppCategoryFilter::All
+    };
+
+    let mut results = if filter == AppCategoryFilter::Actions {
+        engine.search(&format!("@sys {trimmed}"))
+    } else {
+        engine.search(query)
+    };
+    if filter != AppCategoryFilter::All {
+        results.retain(|(item, _)| filter.matches(item));
+    }
+    if filter == AppCategoryFilter::Help && trimmed.is_empty() {
+        results.extend(engine.search("?"));
+    }
     let count = results.len();
     ui.set_has_results(count > 0);
 
@@ -585,15 +787,28 @@ fn apply_theme_command(ui: &AppWindow, cmd: &str) {
 }
 
 fn ensure_selection_visible(ui: &AppWindow, selected_index: i32) {
-    let item_h: f32 = 51.0;
-    let sel = selected_index as f32;
-    let max_v = ui.get_cfg_max_results().clamp(4, 10) as f32;
-    let cur_offset = -ui.get_scroll_viewport_y() / item_h;
-    
-    if sel < cur_offset {
-        ui.set_scroll_viewport_y(-sel * item_h);
-    } else if sel >= cur_offset + max_v {
-        ui.set_scroll_viewport_y(-(sel - max_v + 1.0) * item_h);
+    if ui.get_cfg_view_style() == "liquid_glass" {
+        let theme = ui.global::<view_launcher::Theme>();
+        let row_top = theme.get_panel_padding()
+            + selected_index as f32 * (theme.get_row_height() + theme.get_row_gap());
+        let row_bottom = row_top + theme.get_row_height();
+        let viewport_top = -ui.get_scroll_viewport_y();
+        let viewport_height = ui.get_results_height();
+        if row_top < viewport_top {
+            ui.set_scroll_viewport_y(-row_top);
+        } else if row_bottom > viewport_top + viewport_height {
+            ui.set_scroll_viewport_y(viewport_height - row_bottom);
+        }
+        return;
+    }
+    let row_height = 44.0;
+    let row_top = selected_index as f32 * row_height;
+    let viewport_top = -ui.get_scroll_viewport_y();
+    let viewport_height = ui.get_results_height();
+    if row_top < viewport_top {
+        ui.set_scroll_viewport_y(-row_top);
+    } else if row_top + row_height > viewport_top + viewport_height {
+        ui.set_scroll_viewport_y(viewport_height - row_top - row_height);
     }
 }
 
@@ -634,6 +849,7 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     init_platform_with_app_id("view-launcher")?;
     let ui = AppWindow::new()?;
+    ui.set_categories_enabled(false);
     ui.set_mode_title(prompt.to_string().into());
     ui.set_mode_badge_text("dmenu".into());
     ui.set_is_file_mode(false);
@@ -662,8 +878,8 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(monitor) = winit_window.current_monitor().or_else(|| winit_window.primary_monitor()) {
             let screen_size = monitor.size();
             let scale_factor = monitor.scale_factor();
-            let window_width = (680.0 * scale_factor) as u32;
-            let window_height = (600.0 * scale_factor) as u32;
+            let window_width = (f64::from(ui.get_launcher_width()) * scale_factor) as u32;
+            let window_height = (f64::from(ui.get_launcher_height()) * scale_factor) as u32;
             let pos_x = screen_size.width.saturating_sub(window_width) / 2;
             let pos_y = screen_size.height.saturating_sub(window_height) / 2;
             winit_window.set_outer_position(i_slint_backend_winit::winit::dpi::PhysicalPosition::new(pos_x as i32, pos_y as i32));
@@ -806,9 +1022,29 @@ fn init_platform_with_app_id(app_id: &str) -> Result<(), Box<dyn std::error::Err
 /// frame can take longer than that to reach the screen) flips it to opacity 1, so
 /// `main_card`'s `animate`d `opacity` in app_window.slint eases it in instead of
 /// it just snapping into view. Must be called on the UI/event-loop thread.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn reveal_after_sway_placement(ui: slint::Weak<AppWindow>, deadline: Instant) {
+    slint::Timer::single_shot(Duration::from_millis(8), move || {
+        if let Some(window) = ui.upgrade().filter(|ui| ui.window().is_visible()) {
+            if launcher_is_placed_on_sway(&window) == Some(true) || Instant::now() >= deadline {
+                window.invoke_focus_search();
+                window.set_is_pop_visible(true);
+            } else {
+                reveal_after_sway_placement(ui, deadline);
+            }
+        }
+    });
+}
+
 fn animate_window_pop_in(ui_weak: slint::Weak<AppWindow>) {
     if let Some(ui) = ui_weak.upgrade() {
         ui.set_is_pop_visible(false);
+        #[cfg(all(unix, not(target_os = "macos")))]
+        if std::env::var_os("SWAYSOCK").is_some() {
+            // Allow the compositor to map the window, then place it before fading in.
+            reveal_after_sway_placement(ui_weak, Instant::now() + Duration::from_millis(120));
+            return;
+        }
     }
     slint::Timer::single_shot(std::time::Duration::from_millis(8), move || {
         if let Some(ui) = ui_weak.upgrade() {
@@ -877,8 +1113,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return run_dmenu_mode(&prompt);
     }
 
+    let non_flag_args: Vec<&String> = args.iter().skip(1).filter(|a| !a.starts_with('-')).collect();
+    let initial_query = if !non_flag_args.is_empty() {
+        let q = non_flag_args.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" ");
+        Some(q)
+    } else {
+        None
+    };
+
     // 0. Super-fast single-instance check BEFORE allocating GPU or Window (<0.2ms!)
-    if try_send_to_existing_instance(b"toggle") {
+    let msg_to_send = if let Some(ref q) = initial_query {
+        format!("query:{}", q).into_bytes()
+    } else {
+        b"toggle".to_vec()
+    };
+    if try_send_to_existing_instance(&msg_to_send) {
         return Ok(());
     }
 
@@ -915,7 +1164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(ui) = ui_weak.upgrade() {
                     if ui.window().is_visible() && !ui.get_in_settings_mode() {
                         let elapsed = shown.read().map(|t| t.elapsed()).unwrap_or_default();
-                        if elapsed > std::time::Duration::from_millis(300) {
+                        if elapsed > std::time::Duration::from_millis(600) {
                             if !is_launcher_focused(&ui) {
                                 let _ = ui.hide();
                                 ui.set_search_text("".into());
@@ -939,7 +1188,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.set_cfg_autostart(view_launcher::config::is_autostart_enabled());
     ui.set_cfg_show_icons(config.theme.show_icons.unwrap_or(true));
     ui.set_cfg_show_status_bar(config.theme.show_status_bar.unwrap_or(true));
-    ui.set_cfg_compact_empty(config.theme.compact_empty_view.unwrap_or(true));
+    ui.set_cfg_compact_empty(config.theme.compact_empty_view.unwrap_or(false));
+    ui.set_cfg_view_style(config.theme.view_style.clone().into());
     ui.set_cfg_enable_path_matching(config.search.enable_path_matching.unwrap_or(true));
     ui.set_cfg_max_results(config.search.max_results as i32);
     ui.set_cfg_max_depth(config.search.max_depth as i32);
@@ -990,16 +1240,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(monitor) = monitor_opt {
                 let screen_size = monitor.size();
                 let scale_factor = monitor.scale_factor();
-                let window_width = (680.0 * scale_factor) as u32;
-                let window_height = (600.0 * scale_factor) as u32;
+                let window_width = (f64::from(ui.get_launcher_width()) * scale_factor) as u32;
+                let window_height = (f64::from(ui.get_launcher_height()) * scale_factor) as u32;
                 let pos_x = screen_size.width.saturating_sub(window_width) / 2;
-                let pos_y = screen_size.height.saturating_sub(window_height) / 2;
+                let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok() || std::env::var("XDG_SESSION_TYPE").as_deref() == Ok("wayland");
+                let pos_y = if is_wayland {
+                    screen_size.height.saturating_sub(window_height) / 2
+                } else {
+                    (screen_size.height as f64 * 0.28) as u32
+                };
                 winit_window.set_outer_position(i_slint_backend_winit::winit::dpi::PhysicalPosition::new(pos_x as i32, pos_y as i32));
             }
         });
     };
 
     center_window(&ui);
+
+    // Runtime blur backend detection and startup status reporting
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let (_blur_backend, status, tier_name) = ui.window().with_winit_window(|winit_window| {
+            view_launcher::blur::detect_blur_backend(winit_window)
+        }).unwrap_or_else(|| (Box::new(view_launcher::blur::fallback::FallbackBlurBackend), view_launcher::blur::BlurStatus::Fallback, "Fallback".to_string()));
+
+        let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string());
+        let current_desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "unknown".to_string());
+        println!(
+            "[view-launcher] Session: {}, Desktop: {}, Blur: {} ({:?}), Placement: Centered overlay",
+            session_type, current_desktop, tier_name, status
+        );
+
+        let has_blur = status != view_launcher::blur::BlurStatus::Fallback;
+        ui.set_has_blur(has_blur);
+    }
 
     // Re-center when Wayland surface configure event resolves
     let center_timer = slint::Timer::default();
@@ -1079,12 +1352,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         ui.on_search_text_changed(move |text| {
             if let Some(ui) = ui_weak.upgrade() {
+                ui.set_is_expanded(!text.is_empty() || (ui.get_cfg_view_style() == "liquid_glass"
+                    && !ui.get_active_category().is_empty()));
+                resize_window_for_state(&ui);
                 let items = populate_items(&ui, &engine, &icon_resolver, &text);
                 if let Ok(mut lock) = current_results.write() {
                     *lock = items;
                 }
                 ui.set_selected_index(0);
                 ui.set_scroll_viewport_y(0.0);
+            }
+        });
+    }
+
+    // 5.1 Category Chip Selected (macOS Liquid Glass chips)
+    {
+        let engine = engine.clone();
+        let icon_resolver = icon_resolver.clone();
+        let current_results = current_results.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_chip_selected(move |category| {
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_active_category(category);
+                ui.set_is_expanded(true);
+                resize_window_for_state(&ui);
+                let items = populate_items(&ui, &engine, &icon_resolver, &ui.get_search_text());
+                ui.set_scroll_viewport_y(0.0);
+                if let Ok(mut lock) = current_results.write() {
+                    *lock = items;
+                }
+                ui.set_selected_index(0);
             }
         });
     }
@@ -1395,6 +1692,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ui.set_is_dark(cfg.theme.is_dark());
                 ui.set_in_settings_mode(true);
                 ui.set_settings_status("".into());
+                resize_window_for_state(&ui);
                 ui.invoke_focus_settings();
             }
             if std::env::var("VIEW_LAUNCHER_DEBUG").is_ok() || std::env::var("RUST_LOG").is_ok() {
@@ -1413,6 +1711,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_in_settings_mode(false);
+                resize_window_for_state(&ui);
                 ui.invoke_focus_search();
             }
             if std::env::var("VIEW_LAUNCHER_DEBUG").is_ok() || std::env::var("RUST_LOG").is_ok() {
@@ -1427,7 +1726,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let engine = engine.clone();
         let icon_resolver = icon_resolver.clone();
         let current_results = current_results.clone();
-        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth, autostart, compact_empty, theme_mode, theme_opacity| {
+        ui.on_save_settings(move |show_icons, show_status_bar, enable_path, max_results, max_depth, autostart, compact_empty, theme_mode, theme_opacity, view_style| {
             let mut cfg = Config::load();
             cfg.general.autostart = autostart;
             cfg.theme.show_icons = Some(show_icons);
@@ -1435,6 +1734,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             cfg.theme.compact_empty_view = Some(compact_empty);
             cfg.theme.mode = theme_mode.to_string();
             cfg.theme.opacity = theme_opacity;
+            cfg.theme.view_style = view_style.to_string();
             cfg.search.enable_path_matching = Some(enable_path);
             cfg.search.max_results = max_results as usize;
             cfg.search.max_depth = max_depth as usize;
@@ -1445,7 +1745,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ui.set_is_dark(is_dark);
                 ui.set_cfg_theme_mode(theme_mode);
                 ui.set_cfg_theme_opacity(theme_opacity);
-                ui.set_settings_status("✔ Configuration saved to ~/.config/view-launcher/config.toml".into());
+                ui.set_cfg_view_style(view_style);
+                ui.set_settings_status("✔ Saved automatically".into());
                 let items = populate_items(&ui, &engine, &icon_resolver, &ui.get_search_text());
                 if let Ok(mut lock) = current_results.write() {
                     *lock = items;
@@ -1523,9 +1824,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(mut lock) = shown_instant.write() {
         *lock = Instant::now();
     }
+    if let Some(ref q) = initial_query {
+        ui.set_search_text(q.clone().into());
+        ui.set_is_expanded(true);
+        ui.invoke_search_text_changed(q.clone().into());
+    }
     animate_window_pop_in(ui.as_weak());
     ui.show()?;
     focus_launcher_window(&ui);
+    ui.invoke_focus_search();
+    let ui_w = ui.as_weak();
+    slint::Timer::single_shot(std::time::Duration::from_millis(30), move || {
+        if let Some(ui) = ui_w.upgrade() {
+            ui.invoke_focus_search();
+        }
+    });
     slint::run_event_loop_until_quit()?;
 
     // Cleanup socket on exit
