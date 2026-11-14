@@ -1,6 +1,6 @@
 ; Inno Setup Script for View Launcher
 #define MyAppName "View Launcher"
-#define MyAppVersion "0.5.2"
+#define MyAppVersion "0.5.3"
 #define MyAppPublisher "Hieu Nguyen"
 #define MyAppURL "https://github.com/hieunx1024/view-launcher"
 #define MyAppExeName "view-launcher.exe"
@@ -25,6 +25,8 @@ SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=yes
 ArchitecturesInstallIn64BitMode=x64compatible
+CloseApplications=force
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -58,6 +60,24 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch View Launcher now"; Flags: postinstall nowait skipifsilent
 
 [Code]
+function InitializeSetup(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM view-launcher.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(250);
+  Result := True;
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM view-launcher.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(250);
+  Result := True;
+end;
+
 function NeedsAddPath(Param: string): boolean;
 var
   OrigPath: string;

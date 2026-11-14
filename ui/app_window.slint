@@ -10,7 +10,8 @@ export component AppWindow inherits Window {
     background: transparent;
     width: root.launcher_width;
     height: root.launcher_height;
-    property <length> shadow_margin: root.cfg_view_style == "liquid_glass" && !root.in_settings_mode ? Theme.shadow_margin : 0px;
+    in-out property <bool> cfg_enable_shadow_margin: true;
+    property <length> shadow_margin: root.cfg_enable_shadow_margin && root.cfg_view_style == "liquid_glass" && !root.in_settings_mode ? Theme.shadow_margin : 0px;
     property <length> content_height: root.in_settings_mode ? Theme.settings_height :
         (root.is_showing_list ? Theme.panel_height : Theme.pill_height);
     out property <length> launcher_width: Theme.panel_width + 2 * root.shadow_margin;

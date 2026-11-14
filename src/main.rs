@@ -914,6 +914,8 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     init_platform_with_app_id("view-launcher")?;
     let ui = AppWindow::new()?;
+    #[cfg(target_os = "windows")]
+    ui.set_cfg_enable_shadow_margin(false);
     ui.set_categories_enabled(false);
     ui.set_mode_title(prompt.to_string().into());
     ui.set_mode_badge_text("dmenu".into());
@@ -1211,6 +1213,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. Create main Slint Window for primary resident daemon
     let ui = AppWindow::new()?;
+    #[cfg(target_os = "windows")]
+    ui.set_cfg_enable_shadow_margin(false);
 
     let shown_instant = Arc::new(std::sync::RwLock::new(Instant::now()));
 
