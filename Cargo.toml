@@ -79,3 +79,8 @@ assets = [
     ["assets/view-launcher.png", "usr/share/pixmaps/view-launcher.png", "644"],
     ["README.md", "usr/share/doc/view-launcher/README.md", "644"],
 ]
+
+[profile.release]
+strip = true
+lto = "thin"
+
