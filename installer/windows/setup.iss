@@ -1,6 +1,6 @@
 ; Inno Setup Script for View Launcher
 #define MyAppName "View Launcher"
-#define MyAppVersion "0.5.1"
+#define MyAppVersion "0.5.2"
 #define MyAppPublisher "Hieu Nguyen"
 #define MyAppURL "https://github.com/hieunx1024/view-launcher"
 #define MyAppExeName "view-launcher.exe"
