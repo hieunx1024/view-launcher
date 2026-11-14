@@ -1454,8 +1454,11 @@ impl LauncherEngine {
             return None;
         };
 
+        let is_consecutive = indices.windows(2).all(|w| w[1] == w[0] + 1);
+        let consecutive_bonus = if is_consecutive && indices.len() > 1 { 40 } else { 0 };
+
         let bonus = Self::calculate_tier_bonus(name_normalized, query_normalized);
-        Some((base_score + bonus, indices))
+        Some((base_score + bonus + consecutive_bonus, indices))
     }
 
     #[inline]
@@ -1464,14 +1467,45 @@ impl LauncherEngine {
             return 0;
         }
 
-        // Tier 1: Exact prefix ("image viewer" starts with "image") -> +350 bonus
-        if name_normalized.starts_with(query_normalized) {
-            return 350;
+        // Tier 0: Exact match ("edge" == "edge") -> +500 bonus
+        if name_normalized == query_normalized {
+            return 500;
         }
 
-        // Tier 2: Word-boundary prefix ("gnome image editor" has word starting with "image") -> +200 bonus
-        if name_normalized.split_whitespace().any(|word| word.starts_with(query_normalized)) {
-            return 200;
+        // Tier 0.5: Exact word match ("microsoft edge" has word "edge") -> +420 bonus
+        if name_normalized.split_whitespace().any(|w| w == query_normalized) {
+            return 420;
+        }
+
+        // Check common vendor/publisher prefixes:
+        // "microsoft edge" -> "edge", "google chrome" -> "chrome", "mozilla firefox" -> "firefox"
+        let stripped = strip_vendor_prefix(name_normalized);
+        if stripped == query_normalized {
+            return 450;
+        }
+
+        // Tier 1: Exact prefix ("image viewer" starts with "image", or stripped "edge" starts with "ed")
+        if name_normalized.starts_with(query_normalized) {
+            return 350 + (30usize.saturating_sub(name_normalized.len()) as i64) * 2;
+        }
+        if stripped.starts_with(query_normalized) {
+            return 340 + (30usize.saturating_sub(stripped.len()) as i64) * 2;
+        }
+
+        // Tier 2: Word-boundary prefix ("registry editor" has "editor" starting with "ed")
+        // Shorter matching words get a higher bonus (e.g. "edge" (4) > "editor" (6) > "educational" (11))
+        let mut best_word_bonus = None;
+        for (i, word) in name_normalized.split_whitespace().enumerate() {
+            if word.starts_with(query_normalized) {
+                // Secondary generic words (later in title) get a slight position penalty
+                let position_penalty = if i > 0 { 20 } else { 0 };
+                let length_bonus = (12usize.saturating_sub(word.len()) as i64) * 8;
+                let word_score = 220 + length_bonus - position_penalty;
+                best_word_bonus = Some(best_word_bonus.map_or(word_score, |b: i64| b.max(word_score)));
+            }
+        }
+        if let Some(bonus) = best_word_bonus {
+            return bonus;
         }
 
         // Tier 3: Consecutive substring ("fastimage" contains "image") -> +100 bonus
@@ -1851,6 +1885,15 @@ pub fn remove_vietnamese_accents(s: &str) -> String {
             _ => c.to_ascii_lowercase(),
         }
     }).collect()
+}
+
+pub fn strip_vendor_prefix(name: &str) -> &str {
+    for prefix in &["microsoft ", "google ", "mozilla ", "the "] {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            return rest;
+        }
+    }
+    name
 }
 
 pub fn quote_arg(s: &str) -> String {
@@ -2267,6 +2310,30 @@ mod tests {
         assert!(results.len() >= 2);
         // Image Viewer must rank at #0 above Extension Manager
         assert_eq!(results[0].0.name, "Image Viewer");
+    }
+
+    #[test]
+    fn test_edge_vs_registry() {
+        let mut config = Config::default();
+        config.apps.custom.push(crate::config::CustomAppConfig {
+            name: "Registry Editor".to_string(),
+            exec: "regedit.exe".to_string(),
+            description: None,
+            terminal: false,
+            icon: None,
+            category: None,
+        });
+        config.apps.custom.push(crate::config::CustomAppConfig {
+            name: "Microsoft Edge".to_string(),
+            exec: "msedge.exe".to_string(),
+            description: None,
+            terminal: false,
+            icon: None,
+            category: None,
+        });
+        let engine = LauncherEngine::new(config);
+        let results = engine.search("ed");
+        assert_eq!(results[0].0.name, "Microsoft Edge");
     }
 
     #[test]

@@ -78,6 +78,68 @@ fn is_launcher_focused(ui: &AppWindow) -> bool {
     false
 }
 
+#[cfg(target_os = "windows")]
+fn apply_windows_rounded_corners(ui: &AppWindow) {
+    ui.window().with_winit_window(|winit_window| {
+        use i_slint_backend_winit::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, DeleteObject, SetWindowRgn};
+        use windows_sys::Win32::UI::Controls::MARGINS;
+        use windows_sys::Win32::Graphics::Dwm::{
+            DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+            DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+        };
+
+        if let Ok(handle) = winit_window.window_handle() {
+            if let RawWindowHandle::Win32(win32_handle) = handle.as_raw() {
+                let hwnd = win32_handle.hwnd.get() as HWND;
+                let scale = winit_window.scale_factor();
+                let width = (f64::from(ui.get_launcher_width()) * scale) as i32;
+                let height = (f64::from(ui.get_launcher_height()) * scale) as i32;
+                let radius = (f64::from(ui.get_launcher_radius()) * scale) as i32;
+
+                unsafe {
+                    // 1. DWM Glass/Alpha Composition across full window area
+                    let margins = MARGINS {
+                        cxLeftWidth: -1,
+                        cxRightWidth: -1,
+                        cyTopHeight: -1,
+                        cyBottomHeight: -1,
+                    };
+                    let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
+
+                    // 2. Windows 11 Native Rounded Corners
+                    let preference = DWMWCP_ROUND as u32;
+                    let _ = DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                        &preference as *const _ as *const _,
+                        std::mem::size_of_val(&preference) as u32,
+                    );
+
+                    // 3. Physical HWND rounded region clipping - eliminates any black corners
+                    // even on software renderer, VMs, or when DWM compositing doesn't alpha-blend corners!
+                    if width > 0 && height > 0 {
+                        let hrgn = CreateRoundRectRgn(
+                            0,
+                            0,
+                            width + 1,
+                            height + 1,
+                            radius * 2,
+                            radius * 2,
+                        );
+                        if !hrgn.is_null() {
+                            if SetWindowRgn(hwnd, hrgn, 1) == 0 {
+                                DeleteObject(hrgn);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 #[cfg(all(unix, not(target_os = "macos")))]
 fn is_sway_launcher_focused(sway_sock: &str) -> bool {
     sway_ipc_query(sway_sock, 4).is_some_and(|tree| check_node_focused(&tree))
@@ -236,6 +298,9 @@ fn resize_window_for_state(ui: &AppWindow) {
     ui.window().with_winit_window(move |winit_window| {
         let _ = winit_window.request_inner_size(i_slint_backend_winit::winit::dpi::LogicalSize::new(width, height));
     });
+
+    #[cfg(target_os = "windows")]
+    apply_windows_rounded_corners(ui);
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -886,6 +951,9 @@ fn run_dmenu_mode(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    #[cfg(target_os = "windows")]
+    apply_windows_rounded_corners(&ui);
+
     let current_filtered = std::rc::Rc::new(std::cell::RefCell::new(raw_lines.clone()));
 
     let update_dmenu_view = {
@@ -1255,6 +1323,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     center_window(&ui);
+    #[cfg(target_os = "windows")]
+    apply_windows_rounded_corners(&ui);
 
     // Runtime blur backend detection and startup status reporting
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -1284,6 +1354,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             move || {
                 if let Some(ui) = ui_weak.upgrade() {
                     center_window(&ui);
+                    #[cfg(target_os = "windows")]
+                    apply_windows_rounded_corners(&ui);
                 }
             },
         );
